@@ -85,6 +85,10 @@ class _FakeApiClient:
         self.calls.append({"method": "set_group_kick", "group_id": group_id, "user_id": user_id})
         return {}
 
+    async def send_group_poke(self, group_id: int, user_id: int) -> dict[str, Any]:
+        self.calls.append({"method": "send_group_poke", "group_id": group_id, "user_id": user_id})
+        return {}
+
     async def get_login_info(self) -> dict[str, Any]:
         self.calls.append({"method": "get_login_info"})
         return {}

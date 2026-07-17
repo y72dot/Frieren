@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 try:
     from napcat import (  # type: ignore[import-untyped]
         GroupMessageEvent,
+        NoticeEvent,
         PrivateMessageEvent,
     )
 
@@ -25,6 +26,7 @@ try:
 except ImportError:  # pragma: no cover
     GroupMessageEvent: Any = None  # type: ignore[no-redef]
     PrivateMessageEvent: Any = None  # type: ignore[no-redef]
+    NoticeEvent: Any = None  # type: ignore[no-redef]
     _NAPCAT_AVAILABLE = False
 
 
@@ -124,6 +126,10 @@ class EventBus:
                 is_group=False,
             )
 
+        # typed notice events (napcat-sdk)
+        if NoticeEvent is not None and isinstance(raw_event, NoticeEvent):
+            return self._parse_notice_event(raw_event)
+
         # fallback: dict-style events (post_type-based)
         if isinstance(raw_event, dict):
             return self._parse_dict_event(raw_event)
@@ -175,6 +181,19 @@ class EventBus:
             )
         return None
 
+    @staticmethod
+    def _parse_notice_event(raw_event: Any) -> Event:
+        notice_type = getattr(raw_event, "notice_type", "")
+        user_id = int(getattr(raw_event, "user_id", 0) or 0)
+        group_id = getattr(raw_event, "group_id", None)
+        return Event(
+            type=f"notice.{notice_type}",
+            raw=raw_event,
+            user_id=user_id,
+            group_id=int(group_id) if group_id is not None else None,
+            is_group=group_id is not None,
+        )
+
     # ------------------------------------------------------------------
     # dispatch
     # ------------------------------------------------------------------
@@ -187,13 +206,13 @@ class EventBus:
 
         logger.debug(f"Event: {event.type} from user {event.user_id}")
 
-        if event.type in ("message.group", "message.private"):
-            consumed = await bot.plugin_manager.dispatch(event, bot)
-            if consumed:
-                logger.debug(f"Event consumed by plugin: {event.type}")
+        # Route through plugin manager first
+        consumed = await bot.plugin_manager.dispatch(event, bot)
+        if consumed:
+            logger.debug(f"Event consumed by plugin: {event.type}")
             return
 
-        # Non-message events → emit to listeners
+        # Not consumed by any plugin → emit to listeners
         parts = event.type.split(".", 1)
         if parts:
             await self._emit(parts[0], event, bot)

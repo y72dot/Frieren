@@ -103,6 +103,35 @@ def test_parse_unknown_returns_none():
 
 
 # -------------------------------------------------------------------
+# typed notice events (napcat-sdk)
+# -------------------------------------------------------------------
+
+
+def test_parse_notice_event_typed():
+    from napcat import GroupPokeEvent
+
+    bus = EventBus()
+    raw = GroupPokeEvent.from_dict({
+        "post_type": "notice",
+        "notice_type": "notify",
+        "sub_type": "poke",
+        "user_id": 789,
+        "target_id": 999,
+        "group_id": 101112,
+        "self_id": 3632757457,
+        "time": 1234567890,
+        "raw_info": {},
+    })
+    event = bus.parse(raw)
+    assert event is not None
+    assert event.type == "notice.notify"
+    assert event.user_id == 789
+    assert event.group_id == 101112
+    assert event.is_group is True
+    assert event.raw is raw
+
+
+# -------------------------------------------------------------------
 # dispatch routing
 # -------------------------------------------------------------------
 
