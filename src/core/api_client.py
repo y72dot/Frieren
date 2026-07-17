@@ -60,7 +60,7 @@ class ApiClient:
         client = self._ensure_client()
         try:
             method = getattr(client, action)
-            return await method(**params)
+            return await method(**params)  # type: ignore[no-any-return]
         except Exception:
             logger.opt(exception=True).error(f"API call failed: {action}")
             raise

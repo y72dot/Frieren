@@ -23,8 +23,8 @@ try:
 
     _NAPCAT_AVAILABLE = True
 except ImportError:  # pragma: no cover
-    GroupMessageEvent = None  # type: ignore[assignment]
-    PrivateMessageEvent = None  # type: ignore[assignment]
+    GroupMessageEvent: Any = None  # type: ignore[no-redef]
+    PrivateMessageEvent: Any = None  # type: ignore[no-redef]
     _NAPCAT_AVAILABLE = False
 
 

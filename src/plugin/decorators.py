@@ -8,7 +8,7 @@ later discovers these attributes during ``auto_discover()``.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING
 
 from src.plugin.base import Event, Plugin
@@ -16,8 +16,8 @@ from src.plugin.base import Event, Plugin
 if TYPE_CHECKING:
     from src.core.bot import Bot
 
-# Type alias for decorated handler functions.
-Handler = Callable[..., bool]
+# Type alias for decorated async handler functions.
+Handler = Callable[..., Awaitable[bool]]
 
 
 # ---------------------------------------------------------------------------
@@ -26,12 +26,19 @@ Handler = Callable[..., bool]
 
 
 def _build_command_plugin(
-    func: Handler,
+    func: Callable[..., Awaitable[bool]],
     commands: list[str],
     *,
     priority: int,
 ) -> Plugin:
     class _CommandPlugin:
+        name: str
+        priority: int
+
+        def __init__(self) -> None:
+            self.name = func.__name__
+            self.priority = priority
+
         def match(self, event: Event) -> bool:
             msg = event.message.strip()
             for cmd in commands:
@@ -42,8 +49,6 @@ def _build_command_plugin(
         async def handle(self, event: Event, bot: Bot) -> bool:
             return await func(event, bot)
 
-    _CommandPlugin.name = func.__name__
-    _CommandPlugin.priority = priority
     return _CommandPlugin()
 
 
@@ -74,7 +79,7 @@ def command(
 
 
 def _build_regex_plugin(
-    func: Handler,
+    func: Callable[..., Awaitable[bool]],
     pattern: str,
     *,
     priority: int,
@@ -82,17 +87,22 @@ def _build_regex_plugin(
     compiled = re.compile(pattern)
 
     class _RegexPlugin:
+        name: str
+        priority: int
+
+        def __init__(self) -> None:
+            self.name = func.__name__
+            self.priority = priority
+
         def match(self, event: Event) -> bool:
             return compiled.search(event.message) is not None
 
         async def handle(self, event: Event, bot: Bot) -> bool:
             match = compiled.search(event.message)
             if match is not None:
-                return await func(event, bot, match)
+                return await func(event, bot, match)  # type: ignore[call-arg]
             return False
 
-    _RegexPlugin.name = func.__name__
-    _RegexPlugin.priority = priority
     return _RegexPlugin()
 
 
@@ -119,20 +129,25 @@ def on_regex(
 
 
 def _build_keyword_plugin(
-    func: Handler,
+    func: Callable[..., Awaitable[bool]],
     keywords: list[str],
     *,
     priority: int,
 ) -> Plugin:
     class _KeywordPlugin:
+        name: str
+        priority: int
+
+        def __init__(self) -> None:
+            self.name = func.__name__
+            self.priority = priority
+
         def match(self, event: Event) -> bool:
             return any(kw in event.message for kw in keywords)
 
         async def handle(self, event: Event, bot: Bot) -> bool:
             return await func(event, bot)
 
-    _KeywordPlugin.name = func.__name__
-    _KeywordPlugin.priority = priority
     return _KeywordPlugin()
 
 
@@ -162,7 +177,7 @@ def on_keyword(
 
 
 def _build_notice_plugin(
-    func: Handler,
+    func: Callable[..., Awaitable[bool]],
     notice_type: str,
     *,
     priority: int,
@@ -170,14 +185,19 @@ def _build_notice_plugin(
     target = f"notice.{notice_type}"
 
     class _NoticePlugin:
+        name: str
+        priority: int
+
+        def __init__(self) -> None:
+            self.name = func.__name__
+            self.priority = priority
+
         def match(self, event: Event) -> bool:
             return event.type == target
 
         async def handle(self, event: Event, bot: Bot) -> bool:
             return await func(event, bot)
 
-    _NoticePlugin.name = func.__name__
-    _NoticePlugin.priority = priority
     return _NoticePlugin()
 
 
