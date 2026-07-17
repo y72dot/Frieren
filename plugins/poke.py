@@ -17,7 +17,10 @@ async def poke_back(event: Event, bot: Bot) -> bool:
     # Don't react to the bot's own pokes (infinite loop prevention)
     if event.user_id == bot.config.bot.qq:
         return False
-    target = _get(event.raw, "target_id", 0)
+    target = int(_get(event.raw, "target_id", 0))
     group_id = event.group_id
-    await bot.api.send_group_poke(group_id, int(target))
+    # If the bot is the target, poke back the poker instead of self-poking
+    if target == bot.config.bot.qq:
+        target = event.user_id
+    await bot.api.send_group_poke(group_id, target)
     return True

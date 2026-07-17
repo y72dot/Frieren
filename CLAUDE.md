@@ -29,3 +29,6 @@ No NoneBot / AstrBot / Koishi — core is self-written. Plugins double as AI Age
 - No new dependency frameworks without proposal
 - No middleware chains in plugin dispatch yet (Phase 1: one plugin consumes, stops)
 - Commit format: `type: description` (feat/fix/refactor/test/docs/chore)
+
+### Post-Modification Workflow
+- After making code changes and running tests, restart the bot so changes take effect

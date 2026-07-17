@@ -19,19 +19,34 @@ class TestPokeBack:
         assert result is False
         assert bot.api.calls == []
 
-    def test_group_poke_calls_send_group_poke(self, bot):
-        """Follow-poke: bot pokes the target (person being poked), not the poker."""
+    def test_follow_poke(self, bot):
+        """Follow-poke: someone pokes someone else, bot pokes the target too."""
         event = Event(
             type="notice.notify",
             user_id=789,
             group_id=101112,
             is_group=True,
-            raw={"sub_type": "poke", "user_id": 789, "target_id": 123456},
+            raw={"sub_type": "poke", "user_id": 789, "target_id": 999},
         )
         result = asyncio.run(poke_back(event, bot))
         assert result is True
         assert bot.api.calls == [
-            {"method": "send_group_poke", "group_id": 101112, "user_id": 123456}
+            {"method": "send_group_poke", "group_id": 101112, "user_id": 999}
+        ]
+
+    def test_bot_poked_pokes_back_poker(self, bot):
+        """When someone pokes the bot, bot pokes back the poker (not itself)."""
+        event = Event(
+            type="notice.notify",
+            user_id=789,
+            group_id=101112,
+            is_group=True,
+            raw={"sub_type": "poke", "user_id": 789, "target_id": bot.config.bot.qq},
+        )
+        result = asyncio.run(poke_back(event, bot))
+        assert result is True
+        assert bot.api.calls == [
+            {"method": "send_group_poke", "group_id": 101112, "user_id": 789}
         ]
 
     def test_self_poke_is_ignored(self, bot):
