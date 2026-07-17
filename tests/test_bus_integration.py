@@ -4,6 +4,7 @@ import pytest
 
 from src.core.message_bus import BusMessage, MessageBus, MessageType
 from src.core.message_store import MessageStore
+from src.core.filter_manager import FilterManager
 from src.plugin.base import Event
 
 # -------------------------------------------------------------------
@@ -28,6 +29,7 @@ class _IntegrationBot:
         self.msg_store = MessageStore(db_path=":memory:")
         self.api = _IntegrationApi()
         self.config = None  # set by tests if needed
+        self.filter_mgr = FilterManager()
 
 
 # -------------------------------------------------------------------

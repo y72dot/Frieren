@@ -29,6 +29,8 @@ class ApiClientProtocol(Protocol):
     async def get_stranger_info(self, user_id: int) -> dict[str, Any]: ...
     async def send_group_forward_msg(self, group_id: int, nodes: list[dict[str, Any]]) -> dict[str, Any]: ...
     async def get_msg(self, message_id: int) -> dict[str, Any]: ...
+    async def set_essence_msg(self, message_id: int) -> dict[str, Any]: ...
+    async def delete_essence_msg(self, message_id: int) -> dict[str, Any]: ...
     async def call_action(self, action: str, **params: Any) -> dict[str, Any]: ...
 
 
@@ -199,6 +201,18 @@ class ApiClient:
     async def get_msg(self, message_id: int) -> dict[str, Any]:
         """Retrieve a single message by its napcat message_id."""
         return await self._dispatch_action("get_msg", message_id=message_id)
+
+    # ------------------------------------------------------------------
+    # essence
+    # ------------------------------------------------------------------
+
+    async def set_essence_msg(self, message_id: int) -> dict[str, Any]:
+        """Set a message as group essence."""
+        return await self._dispatch_action("set_essence_msg", message_id=message_id)
+
+    async def delete_essence_msg(self, message_id: int) -> dict[str, Any]:
+        """Remove a message from group essence."""
+        return await self._dispatch_action("delete_essence_msg", message_id=message_id)
 
     # ------------------------------------------------------------------
     # escape hatch

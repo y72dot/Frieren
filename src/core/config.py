@@ -52,10 +52,18 @@ class FilterModeConfig:
 
 
 @dataclass
+class PluginFilterConfig:
+    enable: bool = True
+    group: FilterModeConfig = field(default_factory=FilterModeConfig)
+    private: FilterModeConfig = field(default_factory=FilterModeConfig)
+
+
+@dataclass
 class FilterConfig:
     enable: bool = True
     group: FilterModeConfig = field(default_factory=FilterModeConfig)
     private: FilterModeConfig = field(default_factory=FilterModeConfig)
+    plugins: dict[str, PluginFilterConfig] = field(default_factory=dict)
 
 
 @dataclass
@@ -167,10 +175,21 @@ def _parse_filter_section(data: dict[str, Any]) -> FilterConfig:
             list=[int(x) for x in raw.get("list", [])],
         )
 
+    def _parse_plugin_config(raw: dict[str, Any]) -> PluginFilterConfig:
+        return PluginFilterConfig(
+            enable=bool(raw.get("enable", True)),
+            group=_parse_mode_config(raw.get("group", {})),
+            private=_parse_mode_config(raw.get("private", {})),
+        )
+
+    plugins_raw = data.get("plugins", {})
+    plugins = {name: _parse_plugin_config(cfg) for name, cfg in plugins_raw.items()}
+
     return FilterConfig(
         enable=bool(data.get("enable", True)),
         group=_parse_mode_config(data.get("group", {})),
         private=_parse_mode_config(data.get("private", {})),
+        plugins=plugins,
     )
 
 

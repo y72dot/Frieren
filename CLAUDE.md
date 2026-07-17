@@ -22,6 +22,7 @@ No NoneBot / AstrBot / Koishi — core is self-written.
 | 子系统            | 职责                                                         |
 | ----------------- | ------------------------------------------------------------ |
 | `MessageBus`    | 中央总线，所有插件订阅和 API 调用都经过它                    |
+| `FilterManager` | 统一过滤（全局 + 插件级），挂载于 `bot.filter_mgr`，dispatch 前拦截 |
 | `EventBus`      | 原始 napcat 事件 → 内部`Event`；记录历史；触发总线 dispatch + flush |
 | `MessageStore`  | SQLite 持久化消息历史，插件可通过 `bot.msg_store` 同步查询   |
 | `PluginManager` | 扫描/导入/注册插件到总线 EXTERNAL 队列                       |

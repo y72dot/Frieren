@@ -10,6 +10,7 @@ from loguru import logger
 from src.core.api_client import ApiClient
 from src.core.config import BotConfig, load_config
 from src.core.event_bus import EventBus
+from src.core.filter_manager import FilterManager
 from src.core.message_bus import MessageBus
 from src.core.message_store import MessageStore
 from src.plugin.manager import PluginManager
@@ -32,6 +33,7 @@ class Bot:
         self.api = ApiClient(bus=self.message_bus)
         self.api.set_bot(self)
         self.msg_store = MessageStore()
+        self.filter_mgr = FilterManager(config)
         self.event_bus = EventBus()
         self.plugin_manager = PluginManager(bus=self.message_bus)
         self._running = False

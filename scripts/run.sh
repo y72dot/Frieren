@@ -25,9 +25,9 @@ fi
 
 echo "=== Starting bot (Ctrl+C to stop) ==="
 
-# Run in foreground, tee output to both console and log file.
-# Store PID so next run can kill it.
-python -m src.main 2>&1 | tee -a logs/bot.log &
+# Run in background. loguru's file sink handles clean logfile output;
+# console output goes to the terminal for real-time viewing.
+python -m src.main 2>&1 &
 BOT_PID=$!
 echo $BOT_PID > .bot.pid
 wait $BOT_PID

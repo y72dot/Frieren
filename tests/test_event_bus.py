@@ -3,6 +3,7 @@
 import pytest
 
 from src.core.event_bus import EventBus
+from src.core.filter_manager import FilterManager
 from src.core.message_bus import MessageBus
 from src.core.message_store import MessageStore
 from src.plugin.base import Event
@@ -16,6 +17,7 @@ class _DummyBot:
         self.msg_store = MessageStore(db_path=":memory:")
         self._consumed_events: list[Event] = []
         self.api = _DummyApi()
+        self.filter_mgr = FilterManager()
 
     async def handle(self, event, bot):
         self._consumed_events.append(event)

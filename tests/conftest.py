@@ -152,6 +152,14 @@ class _FakeApiClient:
         self.calls.append({"method": "get_msg", "message_id": message_id})
         return {}
 
+    async def set_essence_msg(self, message_id: int) -> dict[str, Any]:
+        self.calls.append({"method": "set_essence_msg", "message_id": message_id})
+        return {"status": "ok"}
+
+    async def delete_essence_msg(self, message_id: int) -> dict[str, Any]:
+        self.calls.append({"method": "delete_essence_msg", "message_id": message_id})
+        return {"status": "ok"}
+
     async def call_action(self, action: str, **params: Any) -> dict[str, Any]:
         self.calls.append({"method": "call_action", "action": action, "params": params})
         return {}

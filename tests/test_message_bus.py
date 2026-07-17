@@ -4,6 +4,17 @@ import pytest
 
 from src.core.message_bus import BusMessage, MessageBus, MessageType
 from src.core.message_store import MessageStore
+from src.core.filter_manager import FilterManager
+from src.core.config import (
+    BotConfig,
+    BotConfigSection,
+    FilterConfig,
+    FilterModeConfig,
+    NapCatConfig,
+    PluginConfig,
+    PluginFilterConfig,
+    LoggingConfigSection,
+)
 from src.plugin.base import Event
 
 # -------------------------------------------------------------------
@@ -18,6 +29,7 @@ class _MinimalBot:
         self.message_bus = bus
         self.msg_store = MessageStore(db_path=":memory:")
         self.api = _MinimalApi()
+        self.filter_mgr = FilterManager()
 
 
 class _MinimalApi:
@@ -346,3 +358,171 @@ def test_clear_resets_subscriptions():
     # After clear, only built-in _qq_exec remains
     assert bus.subscription_count == 1
     assert len(bus._queue) == 0
+
+
+# -------------------------------------------------------------------
+# dispatch – global filter blocking
+# -------------------------------------------------------------------
+
+
+class _CountingPlugin:
+    """A plugin that records whether it was invoked."""
+
+    def __init__(self, name: str, priority: int = 0):
+        self.name = name
+        self.priority = priority
+        self.match_called = False
+        self.handle_called = False
+
+    def match(self, event: Event) -> bool:
+        self.match_called = True
+        return True
+
+    async def handle(self, event: Event, bot) -> bool:
+        self.handle_called = True
+        return True
+
+
+def _make_filter_config(**kwargs) -> BotConfig:
+    return BotConfig(
+        bot=BotConfigSection(qq=123456, nickname=[], admin_users=kwargs.pop("admin_users", [])),
+        napcat=NapCatConfig(),
+        plugin=PluginConfig(),
+        logging=LoggingConfigSection(),
+        filter=FilterConfig(**kwargs),
+    )
+
+
+@pytest.mark.asyncio
+async def test_global_filter_blocks_before_plugins():
+    """When global filter blocks, no plugin should see the event."""
+    bus = MessageBus()
+    plugin = _CountingPlugin("echo")
+    bus.subscribe(MessageType.EXTERNAL, plugin, 0)
+    bot = _MinimalBot(bus)
+
+    cfg = _make_filter_config(
+        group=FilterModeConfig(mode="blacklist", list=[100]),
+    )
+    bot.filter_mgr = FilterManager(cfg)
+
+    event = Event(type="message.group", user_id=1, message="hi", group_id=100, is_group=True)
+    msg = BusMessage(type=MessageType.EXTERNAL, payload=event)
+    result = await bus.dispatch(msg, bot)
+
+    assert result is False
+    assert plugin.match_called is False
+    assert plugin.handle_called is False
+
+
+@pytest.mark.asyncio
+async def test_global_filter_passes_to_plugins():
+    """When global filter does not block, plugins should run."""
+    bus = MessageBus()
+    plugin = _CountingPlugin("echo")
+    bus.subscribe(MessageType.EXTERNAL, plugin, 0)
+    bot = _MinimalBot(bus)
+
+    cfg = _make_filter_config(
+        group=FilterModeConfig(mode="blacklist", list=[200]),  # only blocks group 200
+    )
+    bot.filter_mgr = FilterManager(cfg)
+
+    event = Event(type="message.group", user_id=1, message="hi", group_id=100, is_group=True)
+    msg = BusMessage(type=MessageType.EXTERNAL, payload=event)
+    result = await bus.dispatch(msg, bot)
+
+    assert result is True
+    assert plugin.match_called is True
+    assert plugin.handle_called is True
+
+
+# -------------------------------------------------------------------
+# dispatch – per-plugin filter blocking
+# -------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_plugin_filter_skips_blocked_plugin():
+    """A plugin-level filter should skip the blocked plugin but let others run."""
+    bus = MessageBus()
+    blocked = _CountingPlugin("blocked", priority=0)
+    unblocked = _CountingPlugin("unblocked", priority=10)
+    bus.subscribe(MessageType.EXTERNAL, blocked, 0)
+    bus.subscribe(MessageType.EXTERNAL, unblocked, 10)
+    bot = _MinimalBot(bus)
+
+    cfg = _make_filter_config(
+        plugins={
+            "blocked": PluginFilterConfig(
+                enable=True,
+                group=FilterModeConfig(mode="blacklist", list=[100]),
+            ),
+        },
+    )
+    bot.filter_mgr = FilterManager(cfg)
+
+    event = Event(type="message.group", user_id=1, message="hi", group_id=100, is_group=True)
+    msg = BusMessage(type=MessageType.EXTERNAL, payload=event)
+    result = await bus.dispatch(msg, bot)
+
+    assert result is True  # consumed by unblocked
+    assert blocked.match_called is False
+    assert blocked.handle_called is False
+    assert unblocked.match_called is True
+    assert unblocked.handle_called is True
+
+
+@pytest.mark.asyncio
+async def test_plugin_filter_not_configured_plugin_runs():
+    """A plugin without filter config should run normally."""
+    bus = MessageBus()
+    plugin = _CountingPlugin("echo")
+    bus.subscribe(MessageType.EXTERNAL, plugin, 0)
+    bot = _MinimalBot(bus)
+
+    cfg = _make_filter_config(
+        plugins={
+            "other": PluginFilterConfig(
+                enable=True,
+                group=FilterModeConfig(mode="blacklist", list=[100]),
+            ),
+        },
+    )
+    bot.filter_mgr = FilterManager(cfg)
+
+    event = Event(type="message.group", user_id=1, message="hi", group_id=100, is_group=True)
+    msg = BusMessage(type=MessageType.EXTERNAL, payload=event)
+    result = await bus.dispatch(msg, bot)
+
+    assert result is True
+    assert plugin.match_called is True
+    assert plugin.handle_called is True
+
+
+@pytest.mark.asyncio
+async def test_admin_bypasses_plugin_filter_in_dispatch():
+    """Admin should bypass plugin-level filters during dispatch."""
+    bus = MessageBus()
+    plugin = _CountingPlugin("echo")
+    bus.subscribe(MessageType.EXTERNAL, plugin, 0)
+    bot = _MinimalBot(bus)
+
+    cfg = _make_filter_config(
+        admin_users=[555],
+        plugins={
+            "echo": PluginFilterConfig(
+                enable=True,
+                group=FilterModeConfig(mode="blacklist", list=[100]),
+            ),
+        },
+    )
+    bot.filter_mgr = FilterManager(cfg)
+
+    event = Event(type="message.group", user_id=555, message="hi", group_id=100, is_group=True)
+    msg = BusMessage(type=MessageType.EXTERNAL, payload=event)
+    result = await bus.dispatch(msg, bot)
+
+    assert result is True
+    assert plugin.match_called is True
+    assert plugin.handle_called is True

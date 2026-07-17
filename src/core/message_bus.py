@@ -201,7 +201,17 @@ class MessageBus:
                 f"Dispatching {msg.type.value} to {len(ordered)} subscriber(s)"
             )
 
+            # -- global filter: block the entire event before any plugin sees it --
+            if msg.type == MessageType.EXTERNAL:
+                if bot.filter_mgr.is_global_blocked(msg.payload):
+                    return False
+
             for sub in ordered:
+                # -- per-plugin filter: skip this plugin only --
+                if msg.type == MessageType.EXTERNAL:
+                    if bot.filter_mgr.is_plugin_blocked(sub.handler.name, msg.payload):
+                        continue
+
                 # match
                 try:
                     matched = sub.handler.match(msg.payload)
