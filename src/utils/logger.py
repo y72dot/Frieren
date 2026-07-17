@@ -22,7 +22,7 @@ def setup_logging(
             "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-            "<level>{message}</level>"
+            "<level>{message}</level> <dim>{extra}</dim>"
         ),
     )
 
@@ -36,5 +36,5 @@ def setup_logging(
         retention=retention,
         encoding="utf-8",
         enqueue=True,
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message}",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message} {extra}",
     )

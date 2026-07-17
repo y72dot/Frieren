@@ -144,6 +144,7 @@ class EventBus:
         if post_type == "message":
             msg_type = data.get("message_type", "")
             group_id = data.get("group_id")
+            logger.debug(f"Parsed dict event: message.{msg_type}" if msg_type else "message")
             return Event(
                 type=f"message.{msg_type}" if msg_type else "message",
                 raw=data,
@@ -154,6 +155,7 @@ class EventBus:
             )
         elif post_type == "notice":
             notice_type = data.get("notice_type", "")
+            logger.debug(f"Parsed dict event: notice.{notice_type}")
             user_id = data.get("user_id", data.get("operator_id", 0))
             group_id = data.get("group_id")
             return Event(
@@ -165,6 +167,7 @@ class EventBus:
             )
         elif post_type == "request":
             req_type = data.get("request_type", "")
+            logger.debug(f"Parsed dict event: request.{req_type}")
             return Event(
                 type=f"request.{req_type}",
                 raw=data,
@@ -175,11 +178,13 @@ class EventBus:
             )
         elif post_type == "meta_event":
             meta_type = data.get("meta_event_type", "")
+            logger.debug(f"Parsed dict event: meta.{meta_type}")
             return Event(
                 type=f"meta.{meta_type}",
                 raw=data,
                 user_id=0,
             )
+        logger.debug(f"Unknown dict post_type={post_type!r}, discarding")
         return None
 
     @staticmethod
@@ -213,9 +218,15 @@ class EventBus:
         """
         event = self.parse(raw_event)
         if event is None:
+            logger.debug(f"Event parse returned None, discarding: {type(raw_event).__name__}")
             return
 
-        logger.debug(f"Event: {event.type} from user {event.user_id}")
+        extra = []
+        if event.group_id:
+            extra.append(f"group={event.group_id}")
+        msg_preview = event.message[:30] if event.message else ""
+        extra.append(f"msg='{msg_preview}'")
+        logger.debug(f"Event: {event.type} user={event.user_id} {' '.join(extra)}")
 
         # Phase 2: route through the message bus.
         msg = BusMessage(
@@ -233,6 +244,7 @@ class EventBus:
             return
 
         # Legacy fallback: emit to raw listeners.
+        logger.debug(f"Event not consumed, falling back to legacy listeners: {event.type}")
         parts = event.type.split(".", 1)
         if parts:
             await self._emit(parts[0], event, bot)

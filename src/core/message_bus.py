@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 import time
 import uuid
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -77,6 +78,7 @@ class _QQExec:
             logger.warning("ACTION message without 'action' field, dropping")
             return None
         params = {k: v for k, v in payload.items() if k != "action"}
+        logger.debug(f"_QQExec: {action}")
         return await bot.api._raw_call(action, **params)
 
 
@@ -186,46 +188,58 @@ class MessageBus:
         subs = self._subscriptions.get(msg.type, [])
         ordered = sorted(subs, key=lambda s: s.priority)
 
-        logger.debug(
-            f"Dispatching {msg.type.value} (trace={msg.trace_id}) "
-            f"to {len(ordered)} subscriber(s)"
+        # Only EXTERNAL events set a trace_id context; nested dispatches
+        # (ACTION etc.) use nullcontext to inherit the outer trace_id.
+        ctx = (
+            logger.contextualize(trace_id=msg.trace_id)
+            if msg.type == MessageType.EXTERNAL
+            else nullcontext()
         )
 
-        for sub in ordered:
-            # match
-            try:
-                matched = sub.handler.match(msg.payload)
-            except Exception:
-                logger.opt(exception=True).error(
-                    f"Plugin.match() raised: {sub.handler.name}"
-                )
-                continue
+        with ctx:
+            logger.debug(
+                f"Dispatching {msg.type.value} to {len(ordered)} subscriber(s)"
+            )
 
-            if not matched:
-                continue
+            for sub in ordered:
+                # match
+                try:
+                    matched = sub.handler.match(msg.payload)
+                except Exception:
+                    logger.opt(exception=True).error(
+                        f"Plugin.match() raised: {sub.handler.name}"
+                    )
+                    continue
 
-            # handle
-            try:
-                result = await sub.handler.handle(msg.payload, bot)
-            except Exception:
-                logger.opt(exception=True).error(
-                    f"Plugin.handle() raised: {sub.handler.name}"
-                )
-                continue
+                logger.debug(f"'{sub.handler.name}'.match() -> {matched}")
 
-            if suppressible and result:
-                logger.debug(
-                    f"Message suppressed by '{sub.handler.name}' "
-                    f"(type={msg.type.value} trace={msg.trace_id})"
-                )
-                return result
+                if not matched:
+                    continue
 
-        # Non-suppressible types: run all handlers.
-        if not suppressible:
-            return None
+                # handle
+                try:
+                    result = await sub.handler.handle(msg.payload, bot)
+                except Exception:
+                    logger.opt(exception=True).error(
+                        f"Plugin.handle() raised: {sub.handler.name}"
+                    )
+                    continue
 
-        # Suppressible but not consumed.
-        return False
+                logger.debug(f"'{sub.handler.name}'.handle() -> {bool(result)}")
+
+                if suppressible and result:
+                    logger.debug(
+                        f"Message suppressed by '{sub.handler.name}'"
+                    )
+                    return result
+
+            # Non-suppressible types: run all handlers.
+            if not suppressible:
+                return None
+
+            # Suppressible but not consumed.
+            logger.debug(f"Event not consumed (type={msg.type.value})")
+            return False
 
     # ------------------------------------------------------------------
     # emit (deferred / queued)

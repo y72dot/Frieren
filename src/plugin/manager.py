@@ -100,6 +100,7 @@ class PluginManager:
 
             for py_file in sorted(path.glob("*.py")):
                 if py_file.name.startswith("_"):
+                    logger.debug(f"Skipping private module: {py_file.name}")
                     continue
 
                 module_name = f"{pkg_name}.{py_file.stem}"

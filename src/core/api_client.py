@@ -51,10 +51,12 @@ class ApiClient:
     def set_client(self, client: Any) -> None:
         """Inject the active napcat-sdk client."""
         self._client = client
+        logger.info("NapCat client connected")
 
     def clear_client(self) -> None:
         """Remove the client reference (e.g. on disconnect)."""
         self._client = None
+        logger.info("NapCat client disconnected")
 
     def set_bot(self, bot: Any) -> None:
         """Store a reference to the Bot instance (needed by the message bus)."""
@@ -66,14 +68,25 @@ class ApiClient:
 
     def _ensure_client(self) -> Any:
         if self._client is None:
+            logger.warning("ApiClient is not connected – no active napcat client")
             raise RuntimeError("ApiClient is not connected – no active napcat client")
         return self._client
 
     async def _call(self, action: str, **params: Any) -> dict[str, Any]:
         client = self._ensure_client()
+        # Truncate message content for logging brevity.
+        log_params = {}
+        for k, v in params.items():
+            if k == "message" and isinstance(v, str) and len(v) > 50:
+                log_params[k] = v[:50] + "..."
+            else:
+                log_params[k] = v
+        logger.debug(f"API call {action} {log_params}")
         try:
             method = getattr(client, action)
-            return await method(**params)  # type: ignore[no-any-return]
+            result = await method(**params)  # type: ignore[no-any-return]
+            logger.debug(f"API ok {action}")
+            return result
         except Exception:
             logger.opt(exception=True).error(f"API call failed: {action}")
             raise
@@ -93,6 +106,7 @@ class ApiClient:
     async def _dispatch_action(self, action: str, **params: Any) -> dict[str, Any]:
         """Route an ACTION message through the bus, or direct call if no bus."""
         if self._bus is not None:
+            logger.debug(f"Dispatching ACTION via bus: {action}")
             payload: dict[str, Any] = {"action": action, **params}
             msg = BusMessage(
                 type=MessageType.ACTION,
@@ -101,6 +115,7 @@ class ApiClient:
             )
             result = await self._bus.dispatch(msg, self._bot)
             return result if isinstance(result, dict) else {}
+        logger.debug(f"Direct API call (no bus): {action}")
         return await self._call(action, **params)
 
     # ------------------------------------------------------------------

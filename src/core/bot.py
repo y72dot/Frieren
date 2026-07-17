@@ -122,15 +122,18 @@ class Bot:
         assert cfg is not None
 
         mode = cfg.napcat.mode
+        logger.info(f"Bot running in {mode} mode")
         if mode == "reverse":
             await self._run_reverse_server()
         else:
+            attempt = 0
             while self._running:
+                attempt += 1
                 try:
                     await self._connect_and_process(cfg.napcat.ws_url, cfg.napcat.token)
                 except (ConnectionError, OSError, TimeoutError):
                     logger.opt(exception=True).error(
-                        "Connection error, will reconnect …"
+                        f"Connection error, will reconnect (attempt {attempt}) …"
                     )
                     self.api.clear_client()
                     await asyncio.sleep(cfg.napcat.reconnect_interval)
@@ -204,6 +207,7 @@ class Bot:
             loop.add_signal_handler(signal.SIGTERM, _shutdown)
         except NotImplementedError:
             # Windows fallback – SIGINT raises KeyboardInterrupt via signal.signal
+            logger.debug("Using Windows signal fallback (signal.signal)")
             signal.signal(signal.SIGINT, lambda s, f: _shutdown())
             signal.signal(signal.SIGTERM, lambda s, f: _shutdown())
 
