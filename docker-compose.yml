@@ -1,47 +1,49 @@
-# NapCatQQ + QQ Bot (dev & deploy)
+# QQ Bot multi-instance deployment with NapCatQQ
+#
+# Each QQ account = one napcat service + one qqbot service.
+# Add more instances by duplicating the service pair with new names.
 #
 # Quick start:
-#   1. docker compose up -d napcat
-#   2. docker compose logs napcat      # wait for QR code
-#   3. Scan QR, login with QQ mobile
-#   4. docker compose up -d qqbot
-#   5. docker compose logs qqbot       # verify: "2 plugin(s) loaded"
+#   1. Create instances/<name>/bot.toml (see instances/frieren/ for example)
+#   2. docker compose up -d napcat-frieren
+#   3. docker compose logs napcat-frieren    # get WebUI URL + token for QR login
+#   4. Open WebUI (http://host:6099), scan QR with QQ mobile
+#   5. docker compose up -d qqbot-frieren
+#   6. docker compose logs -f qqbot-frieren  # verify connection
 #
 services:
-  napcat:
+  # ------------------------------------------------------------------
+  # Frieren (QQ: 3632757457)
+  # ------------------------------------------------------------------
+  napcat-frieren:
     image: mlikiowa/napcat-docker:latest
-    container_name: napcat
+    container_name: napcat-frieren
     restart: unless-stopped
     environment:
-      - ACCOUNT=${NAPCT_QQ:-3632757457}
-      - MODE=ws                        # ws.json: WS server on :3001
-      - NAPCAT_GID=${NAPCT_GID:-0}
-      - NAPCAT_UID=${NAPCT_UID:-0}
+      - ACCOUNT=3632757457
+      - MODE=ws
+      - NAPCAT_GID=0
+      - NAPCAT_UID=0
     ports:
-      - "3001:3001"   # WebSocket for bot
+      - "3001:3001"   # WebSocket for qqbot
       - "6099:6099"   # WebUI
     volumes:
-      - ./data/napcat/QQ:/app/.config/QQ        # QQ login session
-      - ./data/napcat/config:/app/napcat/config  # napcat onebot config
+      - ./instances/napcat-frieren/QQ:/app/.config/QQ
+      - ./instances/napcat-frieren/config:/app/napcat/config
     networks:
       - bot-network
 
-  qqbot:
+  qqbot-frieren:
     build: .
-    container_name: qqbot
+    container_name: qqbot-frieren
     restart: unless-stopped
     depends_on:
-      - napcat
+      - napcat-frieren
+    working_dir: /config
     environment:
-      - NAPCAT_WS_URL=ws://napcat:3001
-      - NAPCAT_TOKEN=${NAPCT_WS_TOKEN:-}
+      - BOT_CONFIG_DIR=/config
     volumes:
-      # Mount source for live dev (remove for production deploy)
-      - ./src:/app/src:ro
-      - ./plugins:/app/plugins:ro
-      - ./config:/app/config:ro
-      - ./logs:/app/logs
-      - ./.env:/app/.env:ro
+      - ./instances/frieren:/config
     networks:
       - bot-network
 

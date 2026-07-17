@@ -1,0 +1,92 @@
+[bot]
+qq = 3632757457
+nickname = ["小72"]
+admin_users = [3175476491]
+
+[napcat]
+mode = "active"
+ws_url = "ws://napcat-frieren:3001"
+token = ""
+reconnect_interval = 5
+
+[plugin]
+auto_discover = true
+plugin_dirs = ["/app/plugins"]
+disabled_plugins = []
+
+[filter]
+enable = true
+
+[filter.group]
+mode = "whitelist"
+list = [511328292, 1039549130]
+
+[filter.private]
+mode = "whitelist"
+list = [3175476491]
+
+[filter.plugins.ping]
+enable = true
+
+[filter.plugins.ping.group]
+mode = "whitelist"
+list = [511328292]
+
+[filter.plugins.ping.private]
+mode = "off"
+
+[filter.plugins.echo]
+enable = true
+
+[filter.plugins.echo.group]
+mode = "whitelist"
+list = [511328292]
+
+[filter.plugins.echo.private]
+mode = "off"
+
+[filter.plugins.poke_back]
+enable = true
+
+[filter.plugins.poke_back.group]
+mode = "whitelist"
+list = [511328292]
+
+[filter.plugins.poke_back.private]
+mode = "off"
+
+[filter.plugins.history]
+enable = true
+
+[filter.plugins.history.group]
+mode = "whitelist"
+list = [511328292]
+
+[filter.plugins.history.private]
+mode = "off"
+
+[filter.plugins.repeater]
+enable = true
+
+[filter.plugins.repeater.group]
+mode = "whitelist"
+list = [511328292]
+
+[filter.plugins.repeater.private]
+mode = "off"
+
+[filter.plugins.essence]
+enable = true
+
+[filter.plugins.essence.group]
+mode = "whitelist"
+list = [511328292]
+
+[filter.plugins.essence.private]
+mode = "off"
+
+[logging]
+level = "DEBUG"
+file = "logs/bot.log"
+rotation = "10 MB"
+retention = "14 days"

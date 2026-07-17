@@ -252,9 +252,10 @@ def load_config(
     ValueError
         If a required field is missing.
     """
-    project_root = _find_project_root()
-
-    if config_dir is None:
+    if config_dir is not None:
+        project_root = Path(config_dir)
+    else:
+        project_root = _find_project_root()
         config_dir = str(project_root / "config")
 
     config_path = Path(config_dir) / "bot.toml"

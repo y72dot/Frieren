@@ -22,6 +22,8 @@ htmlcov/
 
 # Environment & secrets
 .env
+config/
+instances/
 
 # Logs
 logs/
