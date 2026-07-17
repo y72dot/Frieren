@@ -14,6 +14,7 @@ from src.core.config import (
     NapCatConfig,
     PluginConfig,
 )
+from src.core.message_bus import MessageBus
 from src.plugin.base import Event
 from src.plugin.manager import PluginManager
 
@@ -35,16 +36,33 @@ def bot_config() -> BotConfig:
 
 
 # -------------------------------------------------------------------
+# bus fixture
+# -------------------------------------------------------------------
+
+
+@pytest.fixture
+def bus() -> MessageBus:
+    """A fresh MessageBus for testing."""
+    return MessageBus()
+
+
+# -------------------------------------------------------------------
 # API client fixtures
 # -------------------------------------------------------------------
 
 
 class _FakeApiClient:
-    """In-memory ApiClient test double that records calls."""
+    """In-memory ApiClient test double that records calls.
 
-    def __init__(self) -> None:
+    When a bus is injected, ACTION methods route through it.  Without
+    a bus (the default), calls are recorded directly for backward
+    compatibility with existing tests.
+    """
+
+    def __init__(self, bus: MessageBus | None = None) -> None:
         self.calls: list[dict[str, Any]] = []
         self._client: Any = None
+        self._bus = bus
         self._fail_on: str | None = None
         self._raise_error: Exception | None = None
 
@@ -55,13 +73,38 @@ class _FakeApiClient:
     def clear_client(self) -> None:
         self._client = None
 
+    async def _raw_call(self, action: str, **params: Any) -> dict[str, Any]:
+        """Direct call bypassing the bus (used by _qq_exec)."""
+        self.calls.append({"method": action, **params})
+        return {"status": "ok"}
+
     async def send_group_msg(self, group_id: int, message: str) -> dict[str, Any]:
+        if self._bus is not None:
+            from src.core.message_bus import BusMessage, MessageType
+
+            msg = BusMessage(
+                type=MessageType.ACTION,
+                payload={"action": "send_group_msg", "group_id": group_id, "message": message},
+                source="test",
+            )
+            result = await self._bus.dispatch(msg, None)
+            return result if isinstance(result, dict) else {}
         if self._fail_on == "send_group_msg":
             raise self._raise_error or RuntimeError("send_group_msg failed")
         self.calls.append({"method": "send_group_msg", "group_id": group_id, "message": message})
         return {"status": "ok"}
 
     async def send_private_msg(self, user_id: int, message: str) -> dict[str, Any]:
+        if self._bus is not None:
+            from src.core.message_bus import BusMessage, MessageType
+
+            msg = BusMessage(
+                type=MessageType.ACTION,
+                payload={"action": "send_private_msg", "user_id": user_id, "message": message},
+                source="test",
+            )
+            result = await self._bus.dispatch(msg, None)
+            return result if isinstance(result, dict) else {}
         self.calls.append({"method": "send_private_msg", "user_id": user_id, "message": message})
         return {"status": "ok"}
 
@@ -159,6 +202,6 @@ def event_private() -> Event:
 
 
 @pytest.fixture
-def plugin_manager() -> PluginManager:
-    """An empty PluginManager."""
-    return PluginManager()
+def plugin_manager(bus: MessageBus) -> PluginManager:
+    """An empty PluginManager backed by a fresh MessageBus."""
+    return PluginManager(bus=bus)

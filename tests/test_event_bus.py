@@ -3,18 +3,26 @@
 import pytest
 
 from src.core.event_bus import EventBus
+from src.core.message_bus import MessageBus
 from src.plugin.base import Event
+from src.plugin.manager import PluginManager
 
 
 class _DummyBot:
     def __init__(self):
-        from src.plugin.manager import PluginManager
-        self.plugin_manager = PluginManager()
+        self.message_bus = MessageBus()
+        self.plugin_manager = PluginManager(bus=self.message_bus)
         self._consumed_events: list[Event] = []
+        self.api = _DummyApi()
 
     async def handle(self, event, bot):
         self._consumed_events.append(event)
         return True
+
+
+class _DummyApi:
+    async def _raw_call(self, action, **params):
+        return {"status": "ok"}
 
 
 # -------------------------------------------------------------------
@@ -184,6 +192,8 @@ class _ListenerBot:
 
     def __init__(self):
         self.events: list[Event] = []
+        self.message_bus = MessageBus()
+        self.api = _DummyApi()
 
 
 @pytest.mark.asyncio

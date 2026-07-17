@@ -33,6 +33,7 @@ class _FakePlugin:
 def test_bot_init_defaults():
     b = Bot()
     assert b.config is None
+    assert b.message_bus is not None
     assert b.api is not None
     assert b.event_bus is not None
     assert b.plugin_manager is not None

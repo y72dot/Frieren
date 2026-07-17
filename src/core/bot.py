@@ -10,6 +10,7 @@ from loguru import logger
 from src.core.api_client import ApiClient
 from src.core.config import BotConfig, load_config
 from src.core.event_bus import EventBus
+from src.core.message_bus import MessageBus
 from src.plugin.manager import PluginManager
 from src.utils.logger import setup_logging
 
@@ -26,9 +27,11 @@ class Bot:
 
     def __init__(self, config: BotConfig | None = None) -> None:
         self.config: BotConfig | None = config
-        self.api = ApiClient()
+        self.message_bus = MessageBus()
+        self.api = ApiClient(bus=self.message_bus)
+        self.api.set_bot(self)
         self.event_bus = EventBus()
-        self.plugin_manager = PluginManager()
+        self.plugin_manager = PluginManager(bus=self.message_bus)
         self._running = False
         self._main_task: asyncio.Task[None] | None = None
 
@@ -102,7 +105,7 @@ class Bot:
         if self.config is None:
             logger.warning("Cannot reload plugins: config not loaded")
             return
-        self.plugin_manager = PluginManager()
+        self.plugin_manager = PluginManager(bus=self.message_bus)
         self.plugin_manager.auto_discover(
             plugin_dirs=self.config.plugin.plugin_dirs,
             disabled=self.config.plugin.disabled_plugins,

@@ -2,7 +2,11 @@
 
 Each decorator wraps an async handler function and creates an anonymous
 Plugin instance stored in ``func.__plugin__``.  The ``PluginManager``
-later discovers these attributes during ``auto_discover()``.
+later discovers these attributes during ``auto_discover()`` and
+subscribes them to the :class:`MessageBus`.
+
+New in Phase 2: the ``@subscribe`` decorator registers a handler for a
+specific :class:`MessageType` on the bus directly.
 """
 
 from __future__ import annotations
@@ -15,9 +19,41 @@ from src.plugin.base import Event, Plugin
 
 if TYPE_CHECKING:
     from src.core.bot import Bot
+    from src.core.message_bus import MessageType
 
 # Type alias for decorated async handler functions.
 Handler = Callable[..., Awaitable[bool]]
+
+
+# ---------------------------------------------------------------------------
+# @subscribe – generic bus subscription
+# ---------------------------------------------------------------------------
+
+
+def subscribe(
+    message_type: MessageType,
+    *,
+    priority: int = 0,
+) -> Callable[[Handler], Handler]:
+    """Register a handler for a specific message type on the bus.
+
+    The handler receives ``(bus_message: BusMessage, bot: Bot)`` and
+    should return ``True`` to suppress the message (for EXTERNAL /
+    ACTION types) or any value for INTERNAL / LIFECYCLE types.
+
+    Example::
+
+        @subscribe(MessageType.INTERNAL, priority=10)
+        async def on_metrics(msg: BusMessage, bot: Bot) -> bool:
+            logger.info(f"Metric: {msg.payload}")
+            return False
+    """
+
+    def decorator(func: Handler) -> Handler:
+        func.__subscribe__ = (message_type, priority)  # type: ignore[attr-defined]
+        return func
+
+    return decorator
 
 
 # ---------------------------------------------------------------------------

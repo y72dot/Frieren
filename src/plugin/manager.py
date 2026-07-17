@@ -1,4 +1,10 @@
-"""Plugin registry, auto-discovery, and event dispatch."""
+"""Plugin registry, auto-discovery, and bus-based event dispatch.
+
+In Phase 2 the ``PluginManager`` no longer manages its own dispatch
+loop.  Instead, discovered plugins are registered as subscribers on
+the :class:`MessageBus`, and the bus handles priority ordering and
+suppression.
+"""
 
 from __future__ import annotations
 
@@ -9,17 +15,25 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from src.core.message_bus import MessageType
 from src.plugin.base import Plugin
 
 if TYPE_CHECKING:
     from src.core.bot import Bot
+    from src.core.message_bus import MessageBus
     from src.plugin.base import Event
 
 
 class PluginManager:
-    """Manages plugin lifecycle: registration, discovery, and event dispatch."""
+    """Manages plugin lifecycle: discovery and bus registration.
 
-    def __init__(self) -> None:
+    Plugins are discovered from Python modules and subscribed to the
+    :class:`MessageBus` as ``EXTERNAL`` handlers.  Dispatch is handled
+    entirely by the bus.
+    """
+
+    def __init__(self, bus: MessageBus) -> None:
+        self._bus = bus
         self._plugins: list[Plugin] = []
 
     # ------------------------------------------------------------------
@@ -41,17 +55,18 @@ class PluginManager:
     # ------------------------------------------------------------------
 
     def register(self, plugin: Plugin) -> None:
-        """Register a plugin and re-sort by priority."""
+        """Register a plugin on the message bus as an EXTERNAL handler."""
         self._plugins.append(plugin)
-        self._plugins.sort(key=lambda p: p.priority)
+        self._bus.subscribe(MessageType.EXTERNAL, plugin, plugin.priority)
         logger.debug(f"Plugin registered: {plugin.name} (priority={plugin.priority})")
 
     def unregister(self, plugin_name: str) -> bool:
-        """Remove a plugin by name. Returns ``True`` if a plugin was removed."""
+        """Remove a plugin by name from both local list and the bus."""
         before = len(self._plugins)
         self._plugins = [p for p in self._plugins if p.name != plugin_name]
         removed = before != len(self._plugins)
         if removed:
+            self._bus.unsubscribe(MessageType.EXTERNAL, plugin_name)
             logger.info(f"Plugin unregistered: {plugin_name}")
         else:
             logger.warning(f"Plugin not found for unregister: {plugin_name}")
@@ -81,7 +96,6 @@ class PluginManager:
                 logger.warning(f"Plugin directory not found: {dir_name}")
                 continue
 
-            # Build a package name from the directory name (e.g. "plugins").
             pkg_name = path.name
 
             for py_file in sorted(path.glob("*.py")):
@@ -113,6 +127,14 @@ class PluginManager:
             return
 
         for _, obj in inspect.getmembers(module, inspect.isfunction):
+            # New-style: @subscribe decorator
+            subscribe_info = getattr(obj, "__subscribe__", None)
+            if subscribe_info is not None:
+                msg_type, priority = subscribe_info
+                self._register_subscribe_handler(obj, msg_type, priority, disabled)
+                continue
+
+            # Legacy-style: @command / @on_regex / @on_keyword / @on_notice
             plugin = getattr(obj, "__plugin__", None)
             if plugin is None:
                 continue
@@ -123,36 +145,63 @@ class PluginManager:
                 continue
             self.register(plugin)
 
+    def _register_subscribe_handler(
+        self,
+        func,
+        msg_type: MessageType,
+        priority: int,
+        disabled: list[str],
+    ) -> None:
+        """Create a Plugin wrapper for a @subscribe handler and register it."""
+        name = func.__name__
+        if name in disabled:
+            logger.debug(f"Skipping disabled subscribe handler: {name}")
+            return
+
+        handler = _SubscribeAdapter(func, name, priority)
+        self._plugins.append(handler)
+        self._bus.subscribe(msg_type, handler, priority)
+        logger.debug(f"Subscribe handler registered: {name} → {msg_type.value} (priority={priority})")
+
     # ------------------------------------------------------------------
-    # dispatch
+    # dispatch (deprecated – bus handles this)
     # ------------------------------------------------------------------
 
     async def dispatch(self, event: Event, bot: Bot) -> bool:
-        """Route *event* to the first matching plugin, in priority order.
+        """Route *event* through the message bus.
 
-        Returns ``True`` if a plugin consumed the event, ``False`` otherwise.
+        .. deprecated::
+           Call ``bot.message_bus.dispatch()`` directly instead.
+           This method exists for backward compatibility in tests.
         """
-        for plugin in self._plugins:
-            try:
-                matched = plugin.match(event)
-            except Exception:
-                logger.opt(exception=True).error(
-                    f"Plugin.match() raised an exception: {plugin.name}"
-                )
-                continue
+        from src.core.message_bus import BusMessage
 
-            if not matched:
-                continue
+        msg = BusMessage(
+            type=MessageType.EXTERNAL,
+            payload=event,
+            source="event_bus",
+        )
+        result = await self._bus.dispatch(msg, bot)
+        return bool(result)
 
-            try:
-                consumed = await plugin.handle(event, bot)
-            except Exception:
-                logger.opt(exception=True).error(
-                    f"Plugin.handle() raised an exception: {plugin.name}"
-                )
-                continue
 
-            if consumed:
-                return True
+# ------------------------------------------------------------------
+# adapter: wraps a @subscribe function as a Plugin
+# ------------------------------------------------------------------
 
-        return False
+
+class _SubscribeAdapter:
+    """Adapts a ``@subscribe`` function to the :class:`Plugin` protocol."""
+
+    def __init__(self, func, name: str, priority: int) -> None:
+        self._func = func
+        self.name = name
+        self.priority = priority
+
+    def match(self, payload) -> bool:
+        # @subscribe handlers always match their message type;
+        # content filtering is done inside handle().
+        return True
+
+    async def handle(self, payload, bot) -> bool:
+        return await self._func(payload, bot)

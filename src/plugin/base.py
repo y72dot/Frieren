@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from src.core.message_bus import BusMessage, MessageType  # noqa: F401  – re-export
+
 if TYPE_CHECKING:
     from src.core.bot import Bot
 

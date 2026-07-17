@@ -2,8 +2,9 @@
 
 import re
 
+from src.core.message_bus import MessageBus, MessageType
 from src.plugin.base import Event
-from src.plugin.decorators import command, on_keyword, on_notice, on_regex
+from src.plugin.decorators import command, on_keyword, on_notice, on_regex, subscribe
 
 # -------------------------------------------------------------------
 # @command
@@ -86,3 +87,55 @@ def test_notice_decorator_sets_plugin():
     assert p.priority == 0
     assert p.match(Event(type="notice.group_increase", user_id=123, group_id=456, is_group=True))
     assert not p.match(Event(type="notice.group_decrease", user_id=123))
+
+
+# -------------------------------------------------------------------
+# @subscribe
+# -------------------------------------------------------------------
+
+
+async def _bus_handler(msg, bot) -> bool:
+    return True
+
+
+def test_subscribe_decorator_sets_metadata():
+    """@subscribe attaches __subscribe__ metadata to the function."""
+    wrapped = subscribe(MessageType.INTERNAL, priority=10)(_bus_handler)
+    msg_type, priority = wrapped.__subscribe__  # type: ignore[attr-defined]
+    assert msg_type == MessageType.INTERNAL
+    assert priority == 10
+
+
+def test_subscribe_auto_discover_registers_on_bus(tmp_path, monkeypatch):
+    """A @subscribe handler module should be discovered and registered."""
+    import sys
+
+    from src.plugin.manager import PluginManager
+
+    bus = MessageBus()
+    pm = PluginManager(bus=bus)
+
+    # Use a unique package name to avoid conflicts with project plugins/.
+    plugin_dir = tmp_path / "testplugins"
+    plugin_dir.mkdir()
+    (plugin_dir / "__init__.py").write_text("")
+
+    code = '''
+from src.plugin.decorators import subscribe
+from src.core.message_bus import MessageType
+
+@subscribe(MessageType.LIFECYCLE, priority=5)
+async def on_startup(msg, bot) -> bool:
+    return False
+'''
+    (plugin_dir / "lifecycle_plugin.py").write_text(code)
+
+    sys.path.insert(0, str(tmp_path))
+    try:
+        count = pm.auto_discover([str(plugin_dir)])
+    finally:
+        sys.path.remove(str(tmp_path))
+
+    assert count == 1
+    assert pm.plugins[0].name == "on_startup"
+    assert pm.plugins[0].priority == 5

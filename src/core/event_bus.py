@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from src.core.message_bus import BusMessage, MessageType
 from src.plugin.base import Event
 
 if TYPE_CHECKING:
@@ -52,7 +53,7 @@ def _normalise(callback: Callable[[Event, Bot], Any]) -> Listener:
 
 class EventBus:
     """Parses raw napcat-sdk events into internal :class:`Event` objects
-    and dispatches them to plugins and event listeners."""
+    and dispatches them through the :class:`MessageBus`."""
 
     def __init__(self) -> None:
         self._listeners: dict[str, list[Listener]] = {}
@@ -199,20 +200,39 @@ class EventBus:
     # ------------------------------------------------------------------
 
     async def dispatch(self, raw_event: Any, bot: Bot) -> None:
-        """Parse *raw_event* and route to plugin manager or listeners."""
+        """Parse *raw_event* and route through the message bus.
+
+        The flow is:
+
+        1. Parse the raw event into an internal :class:`Event`.
+        2. Wrap it in a ``BusMessage(EXTERNAL)`` and dispatch through
+           the bus (plugins run in priority order).
+        3. Flush the bus queue to process any ACTION / INTERNAL messages
+           emitted by plugins.
+        4. Fall back to legacy listeners if no plugin consumed the event.
+        """
         event = self.parse(raw_event)
         if event is None:
             return
 
         logger.debug(f"Event: {event.type} from user {event.user_id}")
 
-        # Route through plugin manager first
-        consumed = await bot.plugin_manager.dispatch(event, bot)
+        # Phase 2: route through the message bus.
+        msg = BusMessage(
+            type=MessageType.EXTERNAL,
+            payload=event,
+            source="event_bus",
+        )
+        consumed = await bot.message_bus.dispatch(msg, bot)
+
+        # Flush queued messages (ACTION / INTERNAL emitted by plugins).
+        await bot.message_bus.flush(bot)
+
         if consumed:
-            logger.debug(f"Event consumed by plugin: {event.type}")
+            logger.debug(f"Event consumed by bus: {event.type}")
             return
 
-        # Not consumed by any plugin → emit to listeners
+        # Legacy fallback: emit to raw listeners.
         parts = event.type.split(".", 1)
         if parts:
             await self._emit(parts[0], event, bot)
