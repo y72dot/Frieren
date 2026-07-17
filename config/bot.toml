@@ -1,0 +1,26 @@
+[bot]
+qq = 3632757457
+nickname = ["小72"]
+admin_users = [9876543210]
+
+[napcat]
+# All fields below can be overridden by environment variables:
+#   NAPCAT_MODE, NAPCAT_WS_URL, NAPCAT_TOKEN, NAPCAT_REVERSE_PORT
+mode = "active"
+ws_url = "ws://127.0.0.1:3001"   # Docker: ws://napcat:3001
+token = ""
+reconnect_interval = 5
+# Reverse mode settings (when mode = "reverse"):
+# reverse_host = "0.0.0.0"
+# reverse_port = 8080
+
+[plugin]
+auto_discover = true
+plugin_dirs = ["plugins"]
+disabled_plugins = []
+
+[logging]
+level = "INFO"
+file = "logs/bot.log"
+rotation = "10 MB"
+retention = "14 days"

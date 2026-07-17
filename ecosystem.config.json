@@ -1,0 +1,14 @@
+{
+    "apps": [
+        {
+            "name": "qqbot",
+            "script": "src/main.py",
+            "interpreter": "venv/bin/python",
+            "autorestart": true,
+            "max_memory_restart": "256M",
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            }
+        }
+    ]
+}

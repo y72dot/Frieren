@@ -1,0 +1,18 @@
+[project]
+name = "qqbot"
+version = "0.1.0"
+description = "QQ bot powered by NapCatQQ with custom plugin system"
+requires-python = ">=3.12"
+dependencies = [
+    "napcat-sdk>=0.1.0",
+    "loguru>=0.7.0",
+    "python-dotenv>=1.0.0",
+    "aiofiles>=24.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "pytest-asyncio>=0.23.0"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
