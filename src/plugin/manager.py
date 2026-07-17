@@ -145,6 +145,21 @@ class PluginManager:
                 continue
             self.register(plugin)
 
+        # Class-based plugins (e.g. RepeaterPlugin)
+        for _, cls in inspect.getmembers(module, inspect.isclass):
+            if cls is Plugin or cls.__module__ != module.__name__:
+                continue
+            if not (hasattr(cls, "name") and hasattr(cls, "priority")
+                    and hasattr(cls, "match") and hasattr(cls, "handle")):
+                continue
+            instance = cls()
+            if not isinstance(instance, Plugin):
+                continue
+            if instance.name in disabled:
+                logger.debug(f"Skipping disabled plugin: {instance.name}")
+                continue
+            self.register(instance)
+
     def _register_subscribe_handler(
         self,
         func,

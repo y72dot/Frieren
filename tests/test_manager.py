@@ -194,7 +194,7 @@ def test_auto_discover_skips_disabled():
     pm = PluginManager(bus=MessageBus())
     count = pm.auto_discover(
         plugin_dirs=["plugins"],
-        disabled=["ping", "echo", "poke_back"],
+        disabled=["ping", "echo", "poke_back", "repeater"],
     )
     assert count == 0  # all plugins are disabled
 
