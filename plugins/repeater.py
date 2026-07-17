@@ -1,20 +1,17 @@
 """Repeater plugin: repeats the latest group message when the two most recent
-messages come from different users and have identical content."""
+messages (excluding the bot) come from different users and have identical content."""
 
 from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING
 
-from src.plugin.base import Event, Plugin
+from src.plugin.base import Event
 
 if TYPE_CHECKING:
     from src.core.bot import Bot
 
-# Per-group history: group_id → list of (user_id, message), max 2 entries
-_group_history: dict[int, list[tuple[int, str]]] = {}
-
-# Track last repeated message per group to prevent duplicate repeats
+# Track last repeated content per group to prevent duplicate repeats
 _last_repeated: dict[int, str] = {}
 
 # Per-group lock to prevent race conditions from duplicate napcat events
@@ -42,39 +39,40 @@ class RepeaterPlugin:
         if group_id is None:
             return False
 
-        # Lock per group to prevent race conditions from duplicate napcat events
+        # 3. Per-group lock to prevent race conditions from duplicate napcat events
         lock = _locks.setdefault(group_id, asyncio.Lock())
         async with lock:
-            # 3. Record to history, keep last 2
-            history = _group_history.setdefault(group_id, [])
-            history.append((event.user_id, stripped))
-            if len(history) > 2:
-                history[:] = history[-2:]
+            # 4. Query last 2 non-bot messages for this group.
+            #    In production EventBus already recorded the current event,
+            #    so the most recent entry IS the current message.
+            recent_msgs = bot.msg_store.recent(
+                group_id, n=2, exclude_user_id=bot.config.bot.qq
+            )
 
-            # 4. Need at least 2 messages
-            if len(history) < 2:
+            # 5. Need at least 2 non-bot messages to form a pair
+            if len(recent_msgs) < 2:
                 return False
 
-            # 5. Same user → no repeat
-            if history[0][0] == history[1][0]:
+            msg_prev = recent_msgs[-2]
+            msg_curr = recent_msgs[-1]
+
+            # 6. Same user -> no repeat
+            if msg_prev.user_id == msg_curr.user_id:
                 return False
 
-            # 5.5. Different content → no repeat
-            if history[0][1] != history[1][1]:
-                history.clear()
+            # 7. Different content -> no repeat
+            if msg_prev.content != msg_curr.content:
                 return False
 
-            # 6. Different users, same message → check if already repeated this content
-            last_msg = history[1][1]
-            if _last_repeated.get(group_id) == last_msg:
-                history.clear()
+            last_content = msg_curr.content
+            # 8. Already repeated this content?
+            if _last_repeated.get(group_id) == last_content:
                 return False
 
-            # Committing: update state before I/O so dups don't race in
-            _last_repeated[group_id] = last_msg
-            history.clear()
+            # 9. Commit state and repeat
+            _last_repeated[group_id] = last_content
 
-            await bot.api.send_group_msg(group_id, last_msg)
+            await bot.api.send_group_msg(group_id, last_content)
 
-        # 7. Never consume the event
+        # 10. Never consume the event
         return False

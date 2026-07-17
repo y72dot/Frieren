@@ -129,16 +129,20 @@ class Bot:
             await self._run_reverse_server()
         else:
             attempt = 0
+            base_interval = cfg.napcat.reconnect_interval
             while self._running:
                 attempt += 1
                 try:
                     await self._connect_and_process(cfg.napcat.ws_url, cfg.napcat.token)
+                    # Connection closed cleanly (e.g. NapCat restarted) — reset backoff
+                    attempt = 0
                 except (ConnectionError, OSError, TimeoutError):
+                    delay = min(base_interval * (2 ** (attempt - 1)), 300)
                     logger.opt(exception=True).error(
-                        f"Connection error, will reconnect (attempt {attempt}) …"
+                        f"Connection error, retrying in {delay}s (attempt {attempt}) …"
                     )
                     self.api.clear_client()
-                    await asyncio.sleep(cfg.napcat.reconnect_interval)
+                    await asyncio.sleep(delay)
 
     async def _connect_and_process(self, ws_url: str, token: str) -> None:
         """Active mode: bot connects to NapCatQQ WebSocket."""

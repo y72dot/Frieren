@@ -258,3 +258,21 @@ def test_nickname_fallback_to_user_id():
 
     msgs = store.recent(456)
     assert msgs[0].nickname == "555"
+
+
+# -------------------------------------------------------------------
+# exclude_user_id
+# -------------------------------------------------------------------
+
+
+def test_recent_exclude_user():
+    store = MessageStore(db_path=":memory:")
+    store.record(_make_event(1, user_id=111, message="from_111"))
+    store.record(_make_event(2, user_id=222, message="from_222"))
+    store.record(_make_event(3, user_id=333, message="from_333"))
+
+    msgs = store.recent(456, n=10, exclude_user_id=222)
+    assert len(msgs) == 2
+    assert all(m.user_id != 222 for m in msgs)
+    assert msgs[0].user_id == 111
+    assert msgs[1].user_id == 333

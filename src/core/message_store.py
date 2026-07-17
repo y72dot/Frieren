@@ -132,13 +132,27 @@ class MessageStore:
     # queries
     # ------------------------------------------------------------------
 
-    def recent(self, group_id: int, n: int = 10) -> list[StoredMessage]:
-        """Return the most recent *n* messages in a group, oldest first."""
-        rows = self._conn.execute(
-            "SELECT message_id, user_id, nickname, content, time, group_id "
-            "FROM messages WHERE group_id=? ORDER BY time DESC LIMIT ?",
-            (group_id, n),
-        ).fetchall()
+    def recent(
+        self, group_id: int, n: int = 10, exclude_user_id: int | None = None
+    ) -> list[StoredMessage]:
+        """Return the most recent *n* messages in a group, oldest first.
+
+        If *exclude_user_id* is set, messages from that user are filtered out
+        at the SQL level (useful for skipping bot's own messages).
+        """
+        if exclude_user_id is not None:
+            rows = self._conn.execute(
+                "SELECT message_id, user_id, nickname, content, time, group_id "
+                "FROM messages WHERE group_id=? AND user_id!=? "
+                "ORDER BY time DESC LIMIT ?",
+                (group_id, exclude_user_id, n),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT message_id, user_id, nickname, content, time, group_id "
+                "FROM messages WHERE group_id=? ORDER BY time DESC LIMIT ?",
+                (group_id, n),
+            ).fetchall()
         return [StoredMessage(*row) for row in reversed(rows)]
 
     def recent_private(self, user_id: int, n: int = 10) -> list[StoredMessage]:
