@@ -7,7 +7,6 @@ from typing import Any
 from dotenv import dotenv_values
 from loguru import logger
 
-
 # Environment variable names for overriding config values.
 ENV_NAPCAT_MODE = "NAPCAT_MODE"
 ENV_NAPCAT_WS_URL = "NAPCAT_WS_URL"

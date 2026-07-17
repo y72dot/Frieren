@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.plugin.base import Event, Plugin
+from src.plugin.base import Event
 from src.plugin.manager import PluginManager
 
 
@@ -155,3 +155,49 @@ async def test_dispatch_non_consuming_continues():
     event = Event(type="message.group", user_id=1, message="/ping")
     consumed = await pm.dispatch(event, bot)
     assert consumed is True  # ping eventually consumed it
+
+
+# -------------------------------------------------------------------
+# auto_discover
+# -------------------------------------------------------------------
+
+
+class _DummyBotForDiscover:
+    def __init__(self):
+        self.plugin_manager = PluginManager()
+
+
+def test_auto_discover_empty_dir(tmp_path):
+    pm = PluginManager()
+    plugin_dir = tmp_path / "plugins"
+    plugin_dir.mkdir()
+    (plugin_dir / "__init__.py").write_text("")
+    count = pm.auto_discover([str(plugin_dir)])
+    assert count == 0
+
+
+def test_auto_discover_missing_dir():
+    pm = PluginManager()
+    count = pm.auto_discover(["nonexistent_dir_xyz"])
+    assert count == 0
+
+
+def test_auto_discover_skips_disabled():
+    """Disabled plugins should be excluded from discovery."""
+    pm = PluginManager()
+    count = pm.auto_discover(
+        plugin_dirs=["plugins"],
+        disabled=["ping", "echo"],
+    )
+    assert count == 0  # both plugins are disabled
+
+
+def test_auto_discover_bad_import_does_not_crash(tmp_path):
+    """A plugin file that fails to import should not crash auto_discover."""
+    pm = PluginManager()
+    plugin_dir = tmp_path / "plugins"
+    plugin_dir.mkdir()
+    (plugin_dir / "__init__.py").write_text("")
+    (plugin_dir / "bad_syntax.py").write_text("this is not valid python {{{")
+    count = pm.auto_discover([str(plugin_dir)])
+    assert count == 0

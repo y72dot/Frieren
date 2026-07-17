@@ -1,6 +1,5 @@
 """Tests for Event model and Plugin Protocol."""
 
-import pytest
 
 from src.plugin.base import Event, Plugin
 

@@ -2,11 +2,8 @@
 
 import re
 
-import pytest
-
 from src.plugin.base import Event
 from src.plugin.decorators import command, on_keyword, on_notice, on_regex
-
 
 # -------------------------------------------------------------------
 # @command

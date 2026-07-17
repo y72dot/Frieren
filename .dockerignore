@@ -1,20 +1,31 @@
-# Python
 __pycache__/
+*.pyc
 *.py[cod]
 *.egg-info/
 dist/
 build/
 *.egg
 
+# Git
+.git/
+.gitignore
+
 # Virtual environment
 venv/
 .venv/
+
+# Testing & Coverage
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
 
 # Environment & secrets
 .env
 
 # Logs
 logs/
+*.log
 
 # IDE
 .vscode/
@@ -22,11 +33,18 @@ logs/
 *.swp
 *.swo
 
+# Bot runtime data
+data/
+.napcat/
+
 # OS
 .DS_Store
 Thumbs.db
 
-# Bot data (QQ sessions, napcat config)
-data/
-.napcat/
-.claude/settings.local.json
+# Docs & plans
+*.md
+PLAN.md
+CLAUDE.md
+
+# Claude
+.claude/

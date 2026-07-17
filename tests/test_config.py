@@ -1,6 +1,7 @@
 """Tests for config loading and validation."""
 
 import tempfile
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -135,7 +136,7 @@ def test_malformed_toml():
         config_dir.mkdir()
         (config_dir / "bot.toml").write_text(content, encoding="utf-8")
 
-        with pytest.raises(Exception):
+        with pytest.raises(tomllib.TOMLDecodeError):
             load_config(config_dir=str(config_dir))
 
 

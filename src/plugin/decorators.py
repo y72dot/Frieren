@@ -8,7 +8,8 @@ later discovers these attributes during ``auto_discover()``.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Callable, Sequence
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING
 
 from src.plugin.base import Event, Plugin
 
@@ -125,11 +126,7 @@ def _build_keyword_plugin(
 ) -> Plugin:
     class _KeywordPlugin:
         def match(self, event: Event) -> bool:
-            msg = event.message
-            for kw in keywords:
-                if kw in msg:
-                    return True
-            return False
+            return any(kw in event.message for kw in keywords)
 
         async def handle(self, event: Event, bot: Bot) -> bool:
             return await func(event, bot)

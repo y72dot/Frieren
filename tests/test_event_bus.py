@@ -111,7 +111,6 @@ def test_parse_unknown_returns_none():
 async def test_dispatch_routes_message_to_plugin_manager():
     bus = EventBus()
     bot = _DummyBot()
-    from src.plugin.base import Event as E
 
     class _Catcher:
         name = "catcher"
@@ -144,3 +143,113 @@ async def test_dispatch_skips_unknown_event():
     bot = _DummyBot()
     await bus.dispatch("garbage", bot)
     assert len(bot._consumed_events) == 0
+
+
+# -------------------------------------------------------------------
+# listener registration / emission
+# -------------------------------------------------------------------
+
+
+class _ListenerBot:
+    """Minimal bot stub for listener tests (no plugin_manager needed)."""
+
+    def __init__(self):
+        self.events: list[Event] = []
+
+
+@pytest.mark.asyncio
+async def test_listener_on_and_emit():
+    bus = EventBus()
+    bot = _ListenerBot()
+
+    async def _on_notice(event: Event, b: _ListenerBot) -> None:
+        b.events.append(event)
+
+    bus.on("notice", _on_notice)
+
+    notice_event = Event(type="notice.group_increase", user_id=111, group_id=222, is_group=True)
+    await bus._emit("notice", notice_event, bot)
+    assert len(bot.events) == 1
+    assert bot.events[0].type == "notice.group_increase"
+
+
+@pytest.mark.asyncio
+async def test_listener_prefix_matching():
+    """Only listeners with matching prefix should be called."""
+    bus = EventBus()
+    bot = _ListenerBot()
+
+    calls: list[str] = []
+
+    async def _on_notice(event: Event, b) -> None:
+        calls.append("notice")
+
+    async def _on_request(event: Event, b) -> None:
+        calls.append("request")
+
+    bus.on("notice", _on_notice)
+    bus.on("request", _on_request)
+
+    await bus._emit("notice", Event(type="notice.group_increase", user_id=1), bot)
+    assert calls == ["notice"]
+
+
+@pytest.mark.asyncio
+async def test_listener_sync_wrapped_to_async():
+    """Synchronous listeners should be automatically wrapped and work."""
+    bus = EventBus()
+    bot = _ListenerBot()
+
+    def _sync_handler(event: Event, b) -> None:
+        b.events.append(event)
+
+    bus.on("notice", _sync_handler)
+
+    event = Event(type="notice.group_increase", user_id=1)
+    await bus._emit("notice", event, bot)
+    assert len(bot.events) == 1
+
+
+@pytest.mark.asyncio
+async def test_listener_exception_does_not_block_others():
+    """One listener crashing should not prevent others from running."""
+    bus = EventBus()
+    bot = _ListenerBot()
+
+    async def _bad(event: Event, b) -> None:
+        raise RuntimeError("boom")
+
+    async def _good(event: Event, b) -> None:
+        b.events.append(event)
+
+    bus.on("notice", _bad)
+    bus.on("notice", _good)
+
+    await bus._emit("notice", Event(type="notice.group_increase", user_id=1), bot)
+    assert len(bot.events) == 1  # good listener still ran
+
+
+@pytest.mark.asyncio
+async def test_listener_off_removes():
+    bus = EventBus()
+    bot = _ListenerBot()
+
+    async def _handler(event: Event, b) -> None:
+        b.events.append(event)
+
+    bus.on("notice", _handler)
+    await bus._emit("notice", Event(type="notice.heartbeat", user_id=1), bot)
+    assert len(bot.events) == 1
+
+    bus.off("notice", _handler)
+    await bus._emit("notice", Event(type="notice.heartbeat", user_id=1), bot)
+    assert len(bot.events) == 1  # no change
+
+
+def test_listener_off_nonexistent_does_not_crash():
+    bus = EventBus()
+
+    def _nop(event: Event, bot) -> None:
+        pass
+
+    bus.off("notice", _nop)  # should not raise

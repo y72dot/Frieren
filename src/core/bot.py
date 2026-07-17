@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import signal
-from typing import Any
 
 from loguru import logger
 
@@ -25,8 +24,8 @@ class Bot:
         await bot.start()
     """
 
-    def __init__(self) -> None:
-        self.config: BotConfig | None = None
+    def __init__(self, config: BotConfig | None = None) -> None:
+        self.config: BotConfig | None = config
         self.api = ApiClient()
         self.event_bus = EventBus()
         self.plugin_manager = PluginManager()
@@ -44,8 +43,12 @@ class Bot:
     ) -> BotConfig:
         """Load and store configuration.
 
+        If *config* was already injected via the constructor this is a no-op.
+
         Must be called before :meth:`start`.
         """
+        if self.config is not None:
+            return self.config
         self.config = load_config(config_dir=config_dir, env_file=env_file)
         logger.info(f"Configuration loaded (QQ: {self.config.bot.qq})")
         return self.config
@@ -122,7 +125,7 @@ class Bot:
             while self._running:
                 try:
                     await self._connect_and_process(cfg.napcat.ws_url, cfg.napcat.token)
-                except Exception:
+                except (ConnectionError, OSError, TimeoutError):
                     logger.opt(exception=True).error(
                         "Connection error, will reconnect …"
                     )
@@ -141,7 +144,10 @@ class Bot:
 
     async def _run_reverse_server(self) -> None:
         """Reverse mode: NapCatQQ connects to bot."""
-        from napcat import NapCatClient, ReverseWebSocketServer  # type: ignore[import-untyped]
+        from napcat import (  # type: ignore[import-untyped]
+            NapCatClient,
+            ReverseWebSocketServer,
+        )
 
         cfg = self.config
         assert cfg is not None

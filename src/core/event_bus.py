@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import inspect
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -27,7 +28,24 @@ except ImportError:  # pragma: no cover
     _NAPCAT_AVAILABLE = False
 
 
-Listener = Callable[[Event, "Bot"], Any]
+# Async listener type — sync listeners are wrapped in _normalise().
+Listener = Callable[[Event, "Bot"], Awaitable[Any]]
+
+
+def _normalise(callback: Callable[[Event, Bot], Any]) -> Listener:
+    """Wrap a synchronous callback so it can be awaited.
+
+    If *callback* is already a coroutine function, it is returned as-is.
+    """
+    if inspect.iscoroutinefunction(callback):
+        return callback  # type: ignore[return-value]
+
+    async def _wrapper(event: Event, bot: Bot) -> Any:
+        return callback(event, bot)
+
+    _wrapper.__name__ = callback.__name__
+    _wrapper.__wrapped__ = callback  # type: ignore[attr-defined]
+    return _wrapper
 
 
 class EventBus:
@@ -41,17 +59,29 @@ class EventBus:
     # listener management (Phase 2+)
     # ------------------------------------------------------------------
 
-    def on(self, event_prefix: str, callback: Listener) -> None:
-        """Register a listener for events whose type starts with *event_prefix*."""
-        self._listeners.setdefault(event_prefix, []).append(callback)
+    def on(self, event_prefix: str, callback: Callable[[Event, Bot], Any]) -> None:
+        """Register a listener for events whose type starts with *event_prefix*.
 
-    def off(self, event_prefix: str, callback: Listener) -> None:
+        Synchronous callbacks are wrapped so every registered listener is
+        await-able, avoiding per-invocation :func:`inspect` overhead.
+        """
+        async_cb = _normalise(callback)
+        self._listeners.setdefault(event_prefix, []).append(async_cb)
+
+    def off(self, event_prefix: str, callback: Callable[[Event, Bot], Any]) -> None:
         """Remove a previously registered listener."""
-        lst = self._listeners.get(event_prefix, [])
+        lst = self._listeners.get(event_prefix)
+        if lst is None:
+            return
+        # Remove the wrapped version if it matches
+        for wrapped in list(lst):
+            if getattr(wrapped, "__wrapped__", None) is callback:
+                lst.remove(wrapped)
+                break
         if callback in lst:
             lst.remove(callback)
-            if not lst:
-                del self._listeners[event_prefix]
+        if not lst:
+            del self._listeners[event_prefix]
 
     async def _emit(self, event_prefix: str, event: Event, bot: Bot) -> None:
         """Call all listeners matching *event_prefix*."""
@@ -59,7 +89,7 @@ class EventBus:
             if event.type.startswith(prefix):
                 for cb in listeners:
                     try:
-                        await cb(event, bot) if inspect.iscoroutinefunction(cb) else cb(event, bot)  # type: ignore[func-returns-value]
+                        await cb(event, bot)
                     except Exception:
                         logger.opt(exception=True).error(
                             f"Listener {cb.__name__!r} raised an exception"
@@ -75,26 +105,24 @@ class EventBus:
         Returns ``None`` for unknown / unhandled event types.
         """
         # typed message events (napcat-sdk >= 0.1)
-        if GroupMessageEvent is not None:
-            if isinstance(raw_event, GroupMessageEvent):
-                return Event(
-                    type="message.group",
-                    raw=raw_event,
-                    user_id=int(raw_event.user_id),
-                    message=raw_event.raw_message or "",
-                    group_id=int(raw_event.group_id),
-                    is_group=True,
-                )
+        if GroupMessageEvent is not None and isinstance(raw_event, GroupMessageEvent):
+            return Event(
+                type="message.group",
+                raw=raw_event,
+                user_id=int(raw_event.user_id),
+                message=raw_event.raw_message or "",
+                group_id=int(raw_event.group_id),
+                is_group=True,
+            )
 
-        if PrivateMessageEvent is not None:
-            if isinstance(raw_event, PrivateMessageEvent):
-                return Event(
-                    type="message.private",
-                    raw=raw_event,
-                    user_id=int(raw_event.user_id),
-                    message=raw_event.raw_message or "",
-                    is_group=False,
-                )
+        if PrivateMessageEvent is not None and isinstance(raw_event, PrivateMessageEvent):
+            return Event(
+                type="message.private",
+                raw=raw_event,
+                user_id=int(raw_event.user_id),
+                message=raw_event.raw_message or "",
+                is_group=False,
+            )
 
         # fallback: dict-style events (post_type-based)
         if isinstance(raw_event, dict):
