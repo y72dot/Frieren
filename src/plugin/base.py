@@ -19,6 +19,9 @@ class Event:
     user_id: int
     """QQ ID of the message sender or event subject."""
 
+    message_id: int | None = None
+    """NapCat message ID (only for message events)."""
+
     raw: Any = None
     """The original napcat-sdk event object."""
 

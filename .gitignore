@@ -30,3 +30,5 @@ Thumbs.db
 data/
 .napcat/
 .claude/settings.local.json
+.bot.pid
+llms.txt

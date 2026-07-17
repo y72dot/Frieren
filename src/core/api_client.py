@@ -27,6 +27,8 @@ class ApiClientProtocol(Protocol):
     async def get_login_info(self) -> dict[str, Any]: ...
     async def get_friend_list(self) -> dict[str, Any]: ...
     async def get_stranger_info(self, user_id: int) -> dict[str, Any]: ...
+    async def send_group_forward_msg(self, group_id: int, nodes: list[dict[str, Any]]) -> dict[str, Any]: ...
+    async def get_msg(self, message_id: int) -> dict[str, Any]: ...
     async def call_action(self, action: str, **params: Any) -> dict[str, Any]: ...
 
 
@@ -181,6 +183,22 @@ class ApiClient:
 
     async def get_stranger_info(self, user_id: int) -> dict[str, Any]:
         return await self._dispatch_action("get_stranger_info", user_id=user_id)
+
+    # ------------------------------------------------------------------
+    # forwarding / message retrieval
+    # ------------------------------------------------------------------
+
+    async def send_group_forward_msg(
+        self, group_id: int, nodes: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Send a merged-forward message composed of *nodes*."""
+        return await self._dispatch_action(
+            "send_group_forward_msg", group_id=group_id, messages=nodes
+        )
+
+    async def get_msg(self, message_id: int) -> dict[str, Any]:
+        """Retrieve a single message by its napcat message_id."""
+        return await self._dispatch_action("get_msg", message_id=message_id)
 
     # ------------------------------------------------------------------
     # escape hatch

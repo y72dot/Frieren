@@ -113,6 +113,7 @@ class EventBus:
                 type="message.group",
                 raw=raw_event,
                 user_id=int(raw_event.user_id),
+                message_id=int(raw_event.message_id),
                 message=raw_event.raw_message or "",
                 group_id=int(raw_event.group_id),
                 is_group=True,
@@ -123,6 +124,7 @@ class EventBus:
                 type="message.private",
                 raw=raw_event,
                 user_id=int(raw_event.user_id),
+                message_id=int(raw_event.message_id),
                 message=raw_event.raw_message or "",
                 is_group=False,
             )
@@ -149,6 +151,7 @@ class EventBus:
                 type=f"message.{msg_type}" if msg_type else "message",
                 raw=data,
                 user_id=int(data.get("user_id", 0)),
+                message_id=int(data.get("message_id", 0)) or None,
                 message=str(data.get("raw_message", data.get("message", ""))),
                 group_id=int(group_id) if group_id is not None else None,
                 is_group=msg_type == "group",
@@ -221,10 +224,13 @@ class EventBus:
             logger.debug(f"Event parse returned None, discarding: {type(raw_event).__name__}")
             return
 
+        # Record message in the persistent store (before dispatch so plugins can query it).
+        bot.msg_store.record(event)
+
         extra = []
         if event.group_id:
             extra.append(f"group={event.group_id}")
-        msg_preview = event.message[:30] if event.message else ""
+        msg_preview = event.message[:200] if event.message else ""
         extra.append(f"msg='{msg_preview}'")
         logger.debug(f"Event: {event.type} user={event.user_id} {' '.join(extra)}")
 

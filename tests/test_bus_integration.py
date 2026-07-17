@@ -3,6 +3,7 @@
 import pytest
 
 from src.core.message_bus import BusMessage, MessageBus, MessageType
+from src.core.message_store import MessageStore
 from src.plugin.base import Event
 
 # -------------------------------------------------------------------
@@ -24,6 +25,7 @@ class _IntegrationApi:
 class _IntegrationBot:
     def __init__(self, bus: MessageBus):
         self.message_bus = bus
+        self.msg_store = MessageStore(db_path=":memory:")
         self.api = _IntegrationApi()
         self.config = None  # set by tests if needed
 

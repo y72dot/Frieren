@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import tomllib
 from dataclasses import dataclass, field
@@ -44,6 +46,19 @@ class PluginConfig:
 
 
 @dataclass
+class FilterModeConfig:
+    mode: str = "blacklist"  # "whitelist" | "blacklist" | "off"
+    list: list[int] = field(default_factory=list)
+
+
+@dataclass
+class FilterConfig:
+    enable: bool = True
+    group: FilterModeConfig = field(default_factory=FilterModeConfig)
+    private: FilterModeConfig = field(default_factory=FilterModeConfig)
+
+
+@dataclass
 class LoggingConfigSection:
     level: str = "INFO"
     file: str = "logs/bot.log"
@@ -57,6 +72,7 @@ class BotConfig:
     napcat: NapCatConfig
     plugin: PluginConfig
     logging: LoggingConfigSection
+    filter: FilterConfig = field(default_factory=FilterConfig)
     env: dict[str, str] = field(default_factory=dict)
 
 
@@ -144,6 +160,20 @@ def _parse_plugin_section(data: dict[str, Any]) -> PluginConfig:
     )
 
 
+def _parse_filter_section(data: dict[str, Any]) -> FilterConfig:
+    def _parse_mode_config(raw: dict[str, Any]) -> FilterModeConfig:
+        return FilterModeConfig(
+            mode=str(raw.get("mode", "blacklist")),
+            list=[int(x) for x in raw.get("list", [])],
+        )
+
+    return FilterConfig(
+        enable=bool(data.get("enable", True)),
+        group=_parse_mode_config(data.get("group", {})),
+        private=_parse_mode_config(data.get("private", {})),
+    )
+
+
 def _parse_logging_section(data: dict[str, Any]) -> LoggingConfigSection:
     return LoggingConfigSection(
         level=str(data.get("level", "INFO")),
@@ -219,8 +249,9 @@ def load_config(
     napcat = _parse_napcat_section(raw.get("napcat", {}))
     plugin = _parse_plugin_section(raw.get("plugin", {}))
     logging = _parse_logging_section(raw.get("logging", {}))
+    filter_cfg = _parse_filter_section(raw.get("filter", {}))
 
     env_path = env_file if env_file else str(project_root / ".env")
     env = _load_env(Path(env_path).parent) if env_file else _load_env(project_root)
 
-    return BotConfig(bot=bot, napcat=napcat, plugin=plugin, logging=logging, env=env)
+    return BotConfig(bot=bot, napcat=napcat, plugin=plugin, logging=logging, filter=filter_cfg, env=env)

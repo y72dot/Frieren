@@ -144,6 +144,14 @@ class _FakeApiClient:
         self.calls.append({"method": "get_stranger_info", "user_id": user_id})
         return {}
 
+    async def send_group_forward_msg(self, group_id: int, nodes: list[dict[str, Any]]) -> dict[str, Any]:
+        self.calls.append({"method": "send_group_forward_msg", "group_id": group_id, "nodes": nodes})
+        return {}
+
+    async def get_msg(self, message_id: int) -> dict[str, Any]:
+        self.calls.append({"method": "get_msg", "message_id": message_id})
+        return {}
+
     async def call_action(self, action: str, **params: Any) -> dict[str, Any]:
         self.calls.append({"method": "call_action", "action": action, "params": params})
         return {}
@@ -163,8 +171,11 @@ def mock_api_client() -> _FakeApiClient:
 @pytest.fixture
 def bot(bot_config: BotConfig, mock_api_client: _FakeApiClient) -> Bot:
     """Bot instance with injected config and fake API client."""
+    from src.core.message_store import MessageStore
+
     b = Bot(config=bot_config)
     b.api = mock_api_client  # type: ignore[assignment]
+    b.msg_store = MessageStore(db_path=":memory:")
     return b
 
 

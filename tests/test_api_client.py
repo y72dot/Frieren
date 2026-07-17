@@ -69,6 +69,14 @@ class _DummyNapCat:
         self.called.append({"method": "set_group_kick", "args": kwargs})
         return {}
 
+    async def send_group_forward_msg(self, **kwargs):
+        self.called.append({"method": "send_group_forward_msg", "args": kwargs})
+        return {"message_id": 100}
+
+    async def get_msg(self, **kwargs):
+        self.called.append({"method": "get_msg", "args": kwargs})
+        return {"message_id": kwargs["message_id"], "content": "test"}
+
     async def call_action_unknown(self, **kwargs):
         self.called.append({"method": "call_action_unknown", "args": kwargs})
         return {}

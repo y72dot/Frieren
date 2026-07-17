@@ -4,6 +4,7 @@ import pytest
 
 from src.core.event_bus import EventBus
 from src.core.message_bus import MessageBus
+from src.core.message_store import MessageStore
 from src.plugin.base import Event
 from src.plugin.manager import PluginManager
 
@@ -12,6 +13,7 @@ class _DummyBot:
     def __init__(self):
         self.message_bus = MessageBus()
         self.plugin_manager = PluginManager(bus=self.message_bus)
+        self.msg_store = MessageStore(db_path=":memory:")
         self._consumed_events: list[Event] = []
         self.api = _DummyApi()
 
@@ -193,6 +195,7 @@ class _ListenerBot:
     def __init__(self):
         self.events: list[Event] = []
         self.message_bus = MessageBus()
+        self.msg_store = MessageStore(db_path=":memory:")
         self.api = _DummyApi()
 
 
