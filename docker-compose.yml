@@ -42,6 +42,7 @@ services:
     working_dir: /config
     environment:
       - BOT_CONFIG_DIR=/config
+      - PYTHONPATH=/app
     volumes:
       - ./instances/frieren:/config
     networks:
