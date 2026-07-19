@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
-from src.plugin.base import Event
-
 from plugins.essence import EssencePlugin
+from src.plugin.base import Event
 
 
 def _make_group_event(user_id: int, message: str, group_id: int = 456) -> Event:
@@ -54,18 +53,14 @@ class TestEssence:
 
         assert plugin.match(event) is True
         assert asyncio.run(plugin.handle(event, bot)) is False
-        assert bot.api.calls == [
-            {"method": "set_essence_msg", "message_id": 12345}
-        ]
+        assert bot.api.calls == [{"method": "set_essence_msg", "message_id": 12345}]
 
     def test_delete_essence(self, bot):
         plugin = EssencePlugin()
         event = _make_group_event(111, "[CQ:reply,id=67890]寸止")
 
         assert asyncio.run(plugin.handle(event, bot)) is False
-        assert bot.api.calls == [
-            {"method": "delete_essence_msg", "message_id": 67890}
-        ]
+        assert bot.api.calls == [{"method": "delete_essence_msg", "message_id": 67890}]
 
     # --- boundary: no reply CQ code ---
 
@@ -110,9 +105,7 @@ class TestEssence:
         event = _make_group_event(111, "[CQ:reply,id=100]  设精  ")
 
         assert asyncio.run(plugin.handle(event, bot)) is False
-        assert bot.api.calls == [
-            {"method": "set_essence_msg", "message_id": 100}
-        ]
+        assert bot.api.calls == [{"method": "set_essence_msg", "message_id": 100}]
 
     # --- real-world: reply + at mention + keyword ---
 
@@ -121,18 +114,14 @@ class TestEssence:
         event = _make_group_event(111, "[CQ:reply,id=555][CQ:at,qq=123]设精")
 
         assert asyncio.run(plugin.handle(event, bot)) is False
-        assert bot.api.calls == [
-            {"method": "set_essence_msg", "message_id": 555}
-        ]
+        assert bot.api.calls == [{"method": "set_essence_msg", "message_id": 555}]
 
     def test_reply_with_at_and_delete_keyword(self, bot):
         plugin = EssencePlugin()
         event = _make_group_event(111, "[CQ:reply,id=777][CQ:at,qq=456] 寸止")
 
         assert asyncio.run(plugin.handle(event, bot)) is False
-        assert bot.api.calls == [
-            {"method": "delete_essence_msg", "message_id": 777}
-        ]
+        assert bot.api.calls == [{"method": "delete_essence_msg", "message_id": 777}]
 
     # --- behavior: does not consume event ---
 
@@ -162,16 +151,12 @@ class TestEssence:
 
         event1 = _make_group_event(111, "[CQ:reply,id=111]设精")
         asyncio.run(plugin.handle(event1, bot))
-        assert bot.api.calls == [
-            {"method": "set_essence_msg", "message_id": 111}
-        ]
+        assert bot.api.calls == [{"method": "set_essence_msg", "message_id": 111}]
 
         event2 = _make_group_event(222, "[CQ:reply,id=111]寸止")
         asyncio.run(plugin.handle(event2, bot))
         assert len(bot.api.calls) == 2
-        assert bot.api.calls[1] == {
-            "method": "delete_essence_msg", "message_id": 111
-        }
+        assert bot.api.calls[1] == {"method": "delete_essence_msg", "message_id": 111}
 
     # --- error feedback: permission denied ---
 
@@ -181,7 +166,9 @@ class TestEssence:
         orig_set = bot.api.set_essence_msg
 
         async def _fake_set(message_id: int):
-            bot.api.calls.append({"method": "set_essence_msg", "message_id": message_id})
+            bot.api.calls.append(
+                {"method": "set_essence_msg", "message_id": message_id}
+            )
             return {"result": {"errorCode": 10003}}
 
         bot.api.set_essence_msg = _fake_set  # type: ignore[method-assign]
@@ -200,7 +187,9 @@ class TestEssence:
         orig_delete = bot.api.delete_essence_msg
 
         async def _fake_delete(message_id: int):
-            bot.api.calls.append({"method": "delete_essence_msg", "message_id": message_id})
+            bot.api.calls.append(
+                {"method": "delete_essence_msg", "message_id": message_id}
+            )
             return {"result": {"errorCode": 10003}}
 
         bot.api.delete_essence_msg = _fake_delete  # type: ignore[method-assign]
@@ -221,7 +210,9 @@ class TestEssence:
         orig_set = bot.api.set_essence_msg
 
         async def _fake_set(message_id: int):
-            bot.api.calls.append({"method": "set_essence_msg", "message_id": message_id})
+            bot.api.calls.append(
+                {"method": "set_essence_msg", "message_id": message_id}
+            )
             return {"result": {"errorCode": 99999}}
 
         bot.api.set_essence_msg = _fake_set  # type: ignore[method-assign]

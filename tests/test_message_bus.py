@@ -2,19 +2,19 @@
 
 import pytest
 
-from src.core.message_bus import BusMessage, MessageBus, MessageType
-from src.core.message_store import MessageStore
-from src.core.filter_manager import FilterManager
 from src.core.config import (
     BotConfig,
     BotConfigSection,
     FilterConfig,
     FilterModeConfig,
+    LoggingConfigSection,
     NapCatConfig,
     PluginConfig,
     PluginFilterConfig,
-    LoggingConfigSection,
 )
+from src.core.filter_manager import FilterManager
+from src.core.message_bus import BusMessage, MessageBus, MessageType
+from src.core.message_store import MessageStore
 from src.plugin.base import Event
 
 # -------------------------------------------------------------------
@@ -210,7 +210,11 @@ async def test_dispatch_action_spam_suppressed():
 
     msg = BusMessage(
         type=MessageType.ACTION,
-        payload={"action": "send_group_msg", "group_id": 123, "message": "buy spam now!!!"},
+        payload={
+            "action": "send_group_msg",
+            "group_id": 123,
+            "message": "buy spam now!!!",
+        },
     )
     result = await bus.dispatch(msg, bot)
     assert result is True  # suppressed by spam filter
@@ -302,10 +306,12 @@ async def test_emit_and_flush():
     bus = MessageBus()
     bot = _MinimalBot(bus)
 
-    bus.emit(BusMessage(
-        type=MessageType.ACTION,
-        payload={"action": "send_group_msg", "group_id": 1, "message": "hi"},
-    ))
+    bus.emit(
+        BusMessage(
+            type=MessageType.ACTION,
+            payload={"action": "send_group_msg", "group_id": 1, "message": "hi"},
+        )
+    )
     assert len(bot.api.calls) == 0  # not yet processed
 
     await bus.flush(bot)
@@ -339,7 +345,9 @@ async def test_dispatch_depth_limit():
     bus = MessageBus()
     bot = _MinimalBot(bus)
 
-    msg = BusMessage(type=MessageType.EXTERNAL, payload=Event(type="x", user_id=1), depth=11)
+    msg = BusMessage(
+        type=MessageType.EXTERNAL, payload=Event(type="x", user_id=1), depth=11
+    )
     result = await bus.dispatch(msg, bot)
     assert result is False
 
@@ -385,7 +393,9 @@ class _CountingPlugin:
 
 def _make_filter_config(**kwargs) -> BotConfig:
     return BotConfig(
-        bot=BotConfigSection(qq=123456, nickname=[], admin_users=kwargs.pop("admin_users", [])),
+        bot=BotConfigSection(
+            qq=123456, nickname=[], admin_users=kwargs.pop("admin_users", [])
+        ),
         napcat=NapCatConfig(),
         plugin=PluginConfig(),
         logging=LoggingConfigSection(),
@@ -406,7 +416,9 @@ async def test_global_filter_blocks_before_plugins():
     )
     bot.filter_mgr = FilterManager(cfg)
 
-    event = Event(type="message.group", user_id=1, message="hi", group_id=100, is_group=True)
+    event = Event(
+        type="message.group", user_id=1, message="hi", group_id=100, is_group=True
+    )
     msg = BusMessage(type=MessageType.EXTERNAL, payload=event)
     result = await bus.dispatch(msg, bot)
 
@@ -428,7 +440,9 @@ async def test_global_filter_passes_to_plugins():
     )
     bot.filter_mgr = FilterManager(cfg)
 
-    event = Event(type="message.group", user_id=1, message="hi", group_id=100, is_group=True)
+    event = Event(
+        type="message.group", user_id=1, message="hi", group_id=100, is_group=True
+    )
     msg = BusMessage(type=MessageType.EXTERNAL, payload=event)
     result = await bus.dispatch(msg, bot)
 
@@ -462,7 +476,9 @@ async def test_plugin_filter_skips_blocked_plugin():
     )
     bot.filter_mgr = FilterManager(cfg)
 
-    event = Event(type="message.group", user_id=1, message="hi", group_id=100, is_group=True)
+    event = Event(
+        type="message.group", user_id=1, message="hi", group_id=100, is_group=True
+    )
     msg = BusMessage(type=MessageType.EXTERNAL, payload=event)
     result = await bus.dispatch(msg, bot)
 
@@ -491,7 +507,9 @@ async def test_plugin_filter_not_configured_plugin_runs():
     )
     bot.filter_mgr = FilterManager(cfg)
 
-    event = Event(type="message.group", user_id=1, message="hi", group_id=100, is_group=True)
+    event = Event(
+        type="message.group", user_id=1, message="hi", group_id=100, is_group=True
+    )
     msg = BusMessage(type=MessageType.EXTERNAL, payload=event)
     result = await bus.dispatch(msg, bot)
 
@@ -519,7 +537,9 @@ async def test_admin_bypasses_plugin_filter_in_dispatch():
     )
     bot.filter_mgr = FilterManager(cfg)
 
-    event = Event(type="message.group", user_id=555, message="hi", group_id=100, is_group=True)
+    event = Event(
+        type="message.group", user_id=555, message="hi", group_id=100, is_group=True
+    )
     msg = BusMessage(type=MessageType.EXTERNAL, payload=event)
     result = await bus.dispatch(msg, bot)
 

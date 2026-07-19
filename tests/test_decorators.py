@@ -20,10 +20,18 @@ def test_command_decorator_sets_plugin():
     p = plugin.__plugin__
     assert p.name == "_ping_handler"
     assert p.priority == 0
-    assert p.match(Event(type="message.group", user_id=1, message="/ping", is_group=True))
-    assert p.match(Event(type="message.group", user_id=1, message="/ping 123", is_group=True))
-    assert not p.match(Event(type="message.group", user_id=1, message="ping", is_group=True))
-    assert not p.match(Event(type="message.group", user_id=1, message="/pong", is_group=True))
+    assert p.match(
+        Event(type="message.group", user_id=1, message="/ping", is_group=True)
+    )
+    assert p.match(
+        Event(type="message.group", user_id=1, message="/ping 123", is_group=True)
+    )
+    assert not p.match(
+        Event(type="message.group", user_id=1, message="ping", is_group=True)
+    )
+    assert not p.match(
+        Event(type="message.group", user_id=1, message="/pong", is_group=True)
+    )
 
 
 def test_command_multi_cmd():
@@ -47,8 +55,12 @@ def test_regex_decorator_sets_plugin():
     p = plugin.__plugin__
     assert p.name == "_url_handler"
     assert p.priority == 5
-    assert p.match(Event(type="message.group", user_id=1, message="https://example.com"))
-    assert not p.match(Event(type="message.group", user_id=1, message="see http://foo.bar/baz"))
+    assert p.match(
+        Event(type="message.group", user_id=1, message="https://example.com")
+    )
+    assert not p.match(
+        Event(type="message.group", user_id=1, message="see http://foo.bar/baz")
+    )
     assert not p.match(Event(type="message.group", user_id=1, message="no url here"))
 
 
@@ -85,7 +97,9 @@ def test_notice_decorator_sets_plugin():
     p = plugin.__plugin__
     assert p.name == "_notice_handler"
     assert p.priority == 0
-    assert p.match(Event(type="notice.group_increase", user_id=123, group_id=456, is_group=True))
+    assert p.match(
+        Event(type="notice.group_increase", user_id=123, group_id=456, is_group=True)
+    )
     assert not p.match(Event(type="notice.group_decrease", user_id=123))
 
 
@@ -120,14 +134,14 @@ def test_subscribe_auto_discover_registers_on_bus(tmp_path, monkeypatch):
     plugin_dir.mkdir()
     (plugin_dir / "__init__.py").write_text("")
 
-    code = '''
+    code = """
 from src.plugin.decorators import subscribe
 from src.core.message_bus import MessageType
 
 @subscribe(MessageType.LIFECYCLE, priority=5)
 async def on_startup(msg, bot) -> bool:
     return False
-'''
+"""
     (plugin_dir / "lifecycle_plugin.py").write_text(code)
 
     sys.path.insert(0, str(tmp_path))

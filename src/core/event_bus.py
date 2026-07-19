@@ -119,7 +119,9 @@ class EventBus:
                 is_group=True,
             )
 
-        if PrivateMessageEvent is not None and isinstance(raw_event, PrivateMessageEvent):
+        if PrivateMessageEvent is not None and isinstance(
+            raw_event, PrivateMessageEvent
+        ):
             return Event(
                 type="message.private",
                 raw=raw_event,
@@ -146,7 +148,9 @@ class EventBus:
         if post_type == "message":
             msg_type = data.get("message_type", "")
             group_id = data.get("group_id")
-            logger.debug(f"Parsed dict event: message.{msg_type}" if msg_type else "message")
+            logger.debug(
+                f"Parsed dict event: message.{msg_type}" if msg_type else "message"
+            )
             return Event(
                 type=f"message.{msg_type}" if msg_type else "message",
                 raw=data,
@@ -176,7 +180,9 @@ class EventBus:
                 raw=data,
                 user_id=int(data.get("user_id", 0)),
                 message=str(data.get("comment", "")),
-                group_id=int(gid) if (gid := data.get("group_id")) is not None else None,
+                group_id=int(gid)
+                if (gid := data.get("group_id")) is not None
+                else None,
                 is_group=gid is not None,
             )
         elif post_type == "meta_event":
@@ -221,7 +227,9 @@ class EventBus:
         """
         event = self.parse(raw_event)
         if event is None:
-            logger.debug(f"Event parse returned None, discarding: {type(raw_event).__name__}")
+            logger.debug(
+                f"Event parse returned None, discarding: {type(raw_event).__name__}"
+            )
             return
 
         # Record message in the persistent store (before dispatch so plugins can query it).
@@ -250,7 +258,9 @@ class EventBus:
             return
 
         # Legacy fallback: emit to raw listeners.
-        logger.debug(f"Event not consumed, falling back to legacy listeners: {event.type}")
+        logger.debug(
+            f"Event not consumed, falling back to legacy listeners: {event.type}"
+        )
         parts = event.type.split(".", 1)
         if parts:
             await self._emit(parts[0], event, bot)

@@ -150,8 +150,12 @@ class PluginManager:
         for _, cls in inspect.getmembers(module, inspect.isclass):
             if cls is Plugin or cls.__module__ != module.__name__:
                 continue
-            if not (hasattr(cls, "name") and hasattr(cls, "priority")
-                    and hasattr(cls, "match") and hasattr(cls, "handle")):
+            if not (
+                hasattr(cls, "name")
+                and hasattr(cls, "priority")
+                and hasattr(cls, "match")
+                and hasattr(cls, "handle")
+            ):
                 continue
             instance = cls()
             if not isinstance(instance, Plugin):
@@ -177,7 +181,9 @@ class PluginManager:
         handler = _SubscribeAdapter(func, name, priority)
         self._plugins.append(handler)
         self._bus.subscribe(msg_type, handler, priority)
-        logger.debug(f"Subscribe handler registered: {name} → {msg_type.value} (priority={priority})")
+        logger.debug(
+            f"Subscribe handler registered: {name} → {msg_type.value} (priority={priority})"
+        )
 
     # ------------------------------------------------------------------
     # dispatch (deprecated – bus handles this)

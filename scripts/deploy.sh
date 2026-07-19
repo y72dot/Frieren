@@ -1,25 +1,23 @@
 #!/bin/bash
-# Ubuntu cloud server deployment script
+# Ubuntu cloud server — Docker Compose deployment
 set -e
-
 cd "$(dirname "$0")/.."
 
-echo "=== Installing Python dependencies ==="
-python3 -m venv venv
-source venv/bin/activate
-pip install -e .
+echo "=== Building qqbot image ==="
+docker compose build
 
 echo ""
-echo "=== Copy config template if needed ==="
-[ ! -f .env ] && cp .env.example .env && echo ".env created from template" || echo ".env already exists"
+echo "=== Copy .env template if needed ==="
+for inst in instances/*/; do
+    [ ! -f "${inst}.env" ] && cp .env.example "${inst}.env" && echo "${inst}.env created from template" || echo "${inst}.env already exists"
+done
 
 echo ""
-echo "=== Start with PM2 ==="
-pm2 start ecosystem.config.json
-pm2 save
-pm2 startup
+echo "=== Starting NapCat containers ==="
+docker compose up -d $(docker compose config --services | grep napcat)
 
 echo ""
-echo "=== Done ==="
-echo "Bot logs: pm2 logs qqbot"
-echo "NapCat WebUI: http://<server-ip>:6099/webui"
+echo "=== Done (initial setup) ==="
+echo "NapCat WebUI: ssh -L 6099:127.0.0.1:6099 user@host, then open http://localhost:6099"
+echo "Check logs:  docker compose logs -f"
+echo "After QR login, start bots: docker compose up -d"

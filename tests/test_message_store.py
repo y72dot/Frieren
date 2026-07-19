@@ -1,8 +1,7 @@
 """Tests for MessageStore: record, query, dedup, trim, stats."""
 
-from src.core.message_store import MessageStore, StoredMessage
+from src.core.message_store import MessageStore
 from src.plugin.base import Event
-
 
 # -------------------------------------------------------------------
 # helpers
@@ -104,10 +103,16 @@ def test_recent_empty_group():
 
 def test_recent_private():
     store = MessageStore(db_path=":memory:")
-    store.record(_make_event(1, user_id=789, group_id=None, is_group=False, message="hi"))
-    store.record(_make_event(2, user_id=789, group_id=None, is_group=False, message="there"))
+    store.record(
+        _make_event(1, user_id=789, group_id=None, is_group=False, message="hi")
+    )
+    store.record(
+        _make_event(2, user_id=789, group_id=None, is_group=False, message="there")
+    )
     # Also record a group message – should not appear in private results
-    store.record(_make_event(3, user_id=111, group_id=456, is_group=True, message="group"))
+    store.record(
+        _make_event(3, user_id=111, group_id=456, is_group=True, message="group")
+    )
 
     msgs = store.recent_private(789)
     assert len(msgs) == 2

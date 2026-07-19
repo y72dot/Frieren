@@ -141,7 +141,9 @@ class MessageBus:
                 self._subscriptions[message_type].remove(s)
                 break
 
-        sub = Subscription(handler=handler, priority=priority, message_type=message_type)
+        sub = Subscription(
+            handler=handler, priority=priority, message_type=message_type
+        )
         self._subscriptions[message_type].append(sub)
         logger.debug(
             f"Subscribed '{handler.name}' to {message_type.value} (priority={priority})"
@@ -202,15 +204,18 @@ class MessageBus:
             )
 
             # -- global filter: block the entire event before any plugin sees it --
-            if msg.type == MessageType.EXTERNAL:
-                if bot.filter_mgr.is_global_blocked(msg.payload):
-                    return False
+            if msg.type == MessageType.EXTERNAL and bot.filter_mgr.is_global_blocked(
+                msg.payload
+            ):
+                return False
 
             for sub in ordered:
                 # -- per-plugin filter: skip this plugin only --
-                if msg.type == MessageType.EXTERNAL:
-                    if bot.filter_mgr.is_plugin_blocked(sub.handler.name, msg.payload):
-                        continue
+                if (
+                    msg.type == MessageType.EXTERNAL
+                    and bot.filter_mgr.is_plugin_blocked(sub.handler.name, msg.payload)
+                ):
+                    continue
 
                 # match
                 try:
@@ -238,9 +243,7 @@ class MessageBus:
                 logger.debug(f"'{sub.handler.name}'.handle() -> {bool(result)}")
 
                 if suppressible and result:
-                    logger.debug(
-                        f"Message suppressed by '{sub.handler.name}'"
-                    )
+                    logger.debug(f"Message suppressed by '{sub.handler.name}'")
                     return result
 
             # Non-suppressible types: run all handlers.
@@ -308,9 +311,7 @@ class MessageBus:
             batch = self._queue[:]
             self._queue = []
 
-            logger.debug(
-                f"Flush round {round_num}: {len(batch)} message(s)"
-            )
+            logger.debug(f"Flush round {round_num}: {len(batch)} message(s)")
 
             for msg in batch:
                 try:

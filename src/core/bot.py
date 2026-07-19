@@ -57,6 +57,7 @@ class Bot:
         if self.config is not None:
             return self.config
         self.config = load_config(config_dir=config_dir, env_file=env_file)
+        self.filter_mgr.update_config(self.config)
         logger.info(f"Configuration loaded (QQ: {self.config.bot.qq})")
         return self.config
 
@@ -195,9 +196,7 @@ class Bot:
             try:
                 await self.event_bus.dispatch(raw_event, self)
             except Exception:
-                logger.opt(exception=True).error(
-                    "Error dispatching event, skipping …"
-                )
+                logger.opt(exception=True).error("Error dispatching event, skipping …")
 
     # ------------------------------------------------------------------
     # internal: signal handling

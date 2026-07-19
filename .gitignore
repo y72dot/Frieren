@@ -29,6 +29,8 @@ Thumbs.db
 # Bot data (QQ sessions, napcat config)
 data/
 .napcat/
+backups/
+instances/napcat-*/QQ/
 .claude/settings.local.json
 .bot.pid
 llms.txt

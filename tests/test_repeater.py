@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 import itertools
 
-from src.plugin.base import Event
-
 from plugins.repeater import RepeaterPlugin, _last_repeated, _locks
+from src.plugin.base import Event
 
 # Per-module counter for unique message_ids
 _msg_id_counter = itertools.count(1)
@@ -160,14 +159,18 @@ class TestRepeater:
         ]
 
         bot.msg_store.record(event_c)
-        asyncio.run(plugin.handle(event_c, bot))  # only 1 non-bot msg of "Y" (event_b is "X")
+        asyncio.run(
+            plugin.handle(event_c, bot)
+        )  # only 1 non-bot msg of "Y" (event_b is "X")
         assert len(bot.api.calls) == 1
 
         bot.msg_store.record(event_d)
         asyncio.run(plugin.handle(event_d, bot))  # diff user + same -> repeat Y
         assert len(bot.api.calls) == 2
         assert bot.api.calls[1] == {
-            "method": "send_group_msg", "group_id": 456, "message": "Y"
+            "method": "send_group_msg",
+            "group_id": 456,
+            "message": "Y",
         }
 
     # --- behavior: history resolved via msg_store query ---
@@ -212,7 +215,9 @@ class TestRepeater:
         asyncio.run(plugin.handle(event_d, bot))
         assert len(bot.api.calls) == 2
         assert bot.api.calls[1] == {
-            "method": "send_group_msg", "group_id": 456, "message": "Y"
+            "method": "send_group_msg",
+            "group_id": 456,
+            "message": "Y",
         }
 
     # --- scenario: A, A, B pattern ---
@@ -311,7 +316,9 @@ class TestRepeater:
         asyncio.run(plugin.handle(event_f, bot))
         assert len(bot.api.calls) == 2
         assert bot.api.calls[1] == {
-            "method": "send_group_msg", "group_id": 456, "message": "world"
+            "method": "send_group_msg",
+            "group_id": 456,
+            "message": "world",
         }
 
     # --- reply messages: same text, different reply targets -> no repeat ---

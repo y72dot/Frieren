@@ -78,7 +78,11 @@ def _build_command_plugin(
         def match(self, event: Event) -> bool:
             msg = event.message.strip()
             for cmd in commands:
-                if msg == cmd or msg.startswith(cmd + " ") or msg.startswith(cmd + "\n"):
+                if (
+                    msg == cmd
+                    or msg.startswith(cmd + " ")
+                    or msg.startswith(cmd + "\n")
+                ):
                     return True
             return False
 

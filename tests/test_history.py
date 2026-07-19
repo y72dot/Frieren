@@ -4,13 +4,13 @@ import json
 
 import pytest
 
-from src.plugin.base import Event
 from plugins.history import HistoryPlugin
-
+from src.plugin.base import Event
 
 # -------------------------------------------------------------------
 # helpers
 # -------------------------------------------------------------------
+
 
 class _FakeNapcatGroupEvent:
     def to_dict(self) -> dict:
@@ -36,6 +36,7 @@ class _FakeNapcatPrivateEvent:
 # -------------------------------------------------------------------
 # match() tests
 # -------------------------------------------------------------------
+
 
 class TestMatch:
     def test_match_group_message(self):
@@ -68,6 +69,7 @@ class TestMatch:
 # _serialize() tests
 # -------------------------------------------------------------------
 
+
 class TestSerialize:
     def test_serialize_napcat_object_with_to_dict(self):
         raw = _FakeNapcatGroupEvent()
@@ -99,6 +101,7 @@ class TestSerialize:
 # handle() tests
 # -------------------------------------------------------------------
 
+
 class TestHandle:
     @pytest.mark.asyncio
     async def test_handle_writes_jsonl_from_napcat_object(self, bot, tmp_path):
@@ -107,8 +110,12 @@ class TestHandle:
 
         raw = _FakeNapcatGroupEvent()
         event = Event(
-            type="message.group", raw=raw, user_id=111,
-            message="hello", group_id=456, is_group=True,
+            type="message.group",
+            raw=raw,
+            user_id=111,
+            message="hello",
+            group_id=456,
+            is_group=True,
         )
 
         result = await plugin.handle(event, bot)
@@ -128,8 +135,11 @@ class TestHandle:
 
         raw = {"post_type": "message", "message_type": "private", "user_id": 222}
         event = Event(
-            type="message.private", raw=raw, user_id=222,
-            message="hi", is_group=False,
+            type="message.private",
+            raw=raw,
+            user_id=222,
+            message="hi",
+            is_group=False,
         )
 
         await plugin.handle(event, bot)
@@ -186,8 +196,11 @@ class TestHandle:
 
         raw = _FakeNapcatPrivateEvent()
         event = Event(
-            type="message.private", raw=raw, user_id=222,
-            message="hi", is_group=False,
+            type="message.private",
+            raw=raw,
+            user_id=222,
+            message="hi",
+            is_group=False,
         )
 
         await plugin.handle(event, bot)
@@ -201,6 +214,7 @@ class TestHandle:
 # -------------------------------------------------------------------
 # integration tests
 # -------------------------------------------------------------------
+
 
 class TestIntegration:
     def test_plugin_protocol_compliance(self):

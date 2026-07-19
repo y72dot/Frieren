@@ -86,7 +86,7 @@ list = [511328292]
 mode = "off"
 
 [logging]
-level = "DEBUG"
+level = "INFO"
 file = "logs/bot.log"
 rotation = "10 MB"
 retention = "14 days"

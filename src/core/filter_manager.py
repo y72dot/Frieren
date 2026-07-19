@@ -105,11 +105,10 @@ class FilterManager:
     def _is_bypass(self, event: Event) -> bool:
         """Admin users and the bot itself bypass all filters."""
         assert self._config is not None
-        if event.user_id in self._config.bot.admin_users:
-            return True
-        if event.user_id == self._config.bot.qq:
-            return True
-        return False
+        return (
+            event.user_id in self._config.bot.admin_users
+            or event.user_id == self._config.bot.qq
+        )
 
     @staticmethod
     def _apply_mode(mode_cfg: FilterModeConfig, target_id: int | None) -> bool:
@@ -124,8 +123,8 @@ class FilterManager:
 
     @staticmethod
     def _log_block(scope: str, event: Event) -> None:
-        target = f"group={event.group_id}" if event.is_group else f"user={event.user_id}"
-        preview = event.message[:80] if event.message else ""
-        logger.debug(
-            f"Filter blocked [{scope}]: {event.type} {target} msg='{preview}'"
+        target = (
+            f"group={event.group_id}" if event.is_group else f"user={event.user_id}"
         )
+        preview = event.message[:80] if event.message else ""
+        logger.debug(f"Filter blocked [{scope}]: {event.type} {target} msg='{preview}'")

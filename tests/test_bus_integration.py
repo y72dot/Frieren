@@ -2,9 +2,9 @@
 
 import pytest
 
+from src.core.filter_manager import FilterManager
 from src.core.message_bus import BusMessage, MessageBus, MessageType
 from src.core.message_store import MessageStore
-from src.core.filter_manager import FilterManager
 from src.plugin.base import Event
 
 # -------------------------------------------------------------------
@@ -79,7 +79,10 @@ class _LoggerPlugin:
         # Emit an INTERNAL message for metrics collection
         msg = BusMessage(
             type=MessageType.INTERNAL,
-            payload={"event": "cmd_used", "cmd": event.message.split()[0] if event.message else ""},
+            payload={
+                "event": "cmd_used",
+                "cmd": event.message.split()[0] if event.message else "",
+            },
             source="logger",
         )
         bot.message_bus.emit(msg)
@@ -219,7 +222,11 @@ async def test_action_suppression_chain():
     bot.api.calls.clear()
     bad_msg = BusMessage(
         type=MessageType.ACTION,
-        payload={"action": "send_group_msg", "group_id": 1, "message": "this is forbidden content"},
+        payload={
+            "action": "send_group_msg",
+            "group_id": 1,
+            "message": "this is forbidden content",
+        },
     )
     result = await bus.dispatch(bad_msg, bot)
     assert result is True  # suppressed
@@ -267,11 +274,13 @@ async def test_flush_message_storm_truncation():
 
         async def handle(self, payload, b):
             # Re-emit an INTERNAL message each time it's called
-            bus.emit(BusMessage(
-                type=MessageType.INTERNAL,
-                payload={"ping": "pong"},
-                source="noisy",
-            ))
+            bus.emit(
+                BusMessage(
+                    type=MessageType.INTERNAL,
+                    payload={"ping": "pong"},
+                    source="noisy",
+                )
+            )
             return False
 
     bus.subscribe(MessageType.INTERNAL, _NoisyPlugin(), 0)

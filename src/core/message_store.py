@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -164,9 +165,7 @@ class MessageStore:
         ).fetchall()
         return [StoredMessage(*row) for row in reversed(rows)]
 
-    def by_user(
-        self, group_id: int, user_id: int, n: int = 10
-    ) -> list[StoredMessage]:
+    def by_user(self, group_id: int, user_id: int, n: int = 10) -> list[StoredMessage]:
         """Return recent messages by a specific user in a group."""
         rows = self._conn.execute(
             "SELECT message_id, user_id, nickname, content, time, group_id "
@@ -210,9 +209,7 @@ class MessageStore:
 
     def stats(self) -> dict:
         """Return basic statistics about the store."""
-        total = self._conn.execute(
-            "SELECT COUNT(*) FROM messages"
-        ).fetchone()[0]
+        total = self._conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
         groups = self._conn.execute(
             "SELECT COUNT(DISTINCT group_id) FROM messages WHERE is_group=1"
         ).fetchone()[0]
@@ -227,7 +224,5 @@ class MessageStore:
         self._conn.close()
 
     def __del__(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self._conn.close()
-        except Exception:
-            pass

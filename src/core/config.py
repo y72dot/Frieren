@@ -274,4 +274,11 @@ def load_config(
     env_path = env_file if env_file else str(project_root / ".env")
     env = _load_env(Path(env_path).parent) if env_file else _load_env(project_root)
 
-    return BotConfig(bot=bot, napcat=napcat, plugin=plugin, logging=logging, filter=filter_cfg, env=env)
+    return BotConfig(
+        bot=bot,
+        napcat=napcat,
+        plugin=plugin,
+        logging=logging,
+        filter=filter_cfg,
+        env=env,
+    )

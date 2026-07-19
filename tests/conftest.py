@@ -84,14 +84,20 @@ class _FakeApiClient:
 
             msg = BusMessage(
                 type=MessageType.ACTION,
-                payload={"action": "send_group_msg", "group_id": group_id, "message": message},
+                payload={
+                    "action": "send_group_msg",
+                    "group_id": group_id,
+                    "message": message,
+                },
                 source="test",
             )
             result = await self._bus.dispatch(msg, None)
             return result if isinstance(result, dict) else {}
         if self._fail_on == "send_group_msg":
             raise self._raise_error or RuntimeError("send_group_msg failed")
-        self.calls.append({"method": "send_group_msg", "group_id": group_id, "message": message})
+        self.calls.append(
+            {"method": "send_group_msg", "group_id": group_id, "message": message}
+        )
         return {"status": "ok"}
 
     async def send_private_msg(self, user_id: int, message: str) -> dict[str, Any]:
@@ -100,36 +106,63 @@ class _FakeApiClient:
 
             msg = BusMessage(
                 type=MessageType.ACTION,
-                payload={"action": "send_private_msg", "user_id": user_id, "message": message},
+                payload={
+                    "action": "send_private_msg",
+                    "user_id": user_id,
+                    "message": message,
+                },
                 source="test",
             )
             result = await self._bus.dispatch(msg, None)
             return result if isinstance(result, dict) else {}
-        self.calls.append({"method": "send_private_msg", "user_id": user_id, "message": message})
+        self.calls.append(
+            {"method": "send_private_msg", "user_id": user_id, "message": message}
+        )
         return {"status": "ok"}
 
     async def get_group_info(self, group_id: int) -> dict[str, Any]:
         self.calls.append({"method": "get_group_info", "group_id": group_id})
         return {}
 
-    async def get_group_member_info(self, group_id: int, user_id: int) -> dict[str, Any]:
-        self.calls.append({"method": "get_group_member_info", "group_id": group_id, "user_id": user_id})
+    async def get_group_member_info(
+        self, group_id: int, user_id: int
+    ) -> dict[str, Any]:
+        self.calls.append(
+            {
+                "method": "get_group_member_info",
+                "group_id": group_id,
+                "user_id": user_id,
+            }
+        )
         return {}
 
     async def get_group_member_list(self, group_id: int) -> dict[str, Any]:
         self.calls.append({"method": "get_group_member_list", "group_id": group_id})
         return {}
 
-    async def set_group_ban(self, group_id: int, user_id: int, duration: int) -> dict[str, Any]:
-        self.calls.append({"method": "set_group_ban", "group_id": group_id, "user_id": user_id, "duration": duration})
+    async def set_group_ban(
+        self, group_id: int, user_id: int, duration: int
+    ) -> dict[str, Any]:
+        self.calls.append(
+            {
+                "method": "set_group_ban",
+                "group_id": group_id,
+                "user_id": user_id,
+                "duration": duration,
+            }
+        )
         return {}
 
     async def set_group_kick(self, group_id: int, user_id: int) -> dict[str, Any]:
-        self.calls.append({"method": "set_group_kick", "group_id": group_id, "user_id": user_id})
+        self.calls.append(
+            {"method": "set_group_kick", "group_id": group_id, "user_id": user_id}
+        )
         return {}
 
     async def send_group_poke(self, group_id: int, user_id: int) -> dict[str, Any]:
-        self.calls.append({"method": "send_group_poke", "group_id": group_id, "user_id": user_id})
+        self.calls.append(
+            {"method": "send_group_poke", "group_id": group_id, "user_id": user_id}
+        )
         return {}
 
     async def get_login_info(self) -> dict[str, Any]:
@@ -144,8 +177,12 @@ class _FakeApiClient:
         self.calls.append({"method": "get_stranger_info", "user_id": user_id})
         return {}
 
-    async def send_group_forward_msg(self, group_id: int, nodes: list[dict[str, Any]]) -> dict[str, Any]:
-        self.calls.append({"method": "send_group_forward_msg", "group_id": group_id, "nodes": nodes})
+    async def send_group_forward_msg(
+        self, group_id: int, nodes: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        self.calls.append(
+            {"method": "send_group_forward_msg", "group_id": group_id, "nodes": nodes}
+        )
         return {}
 
     async def get_msg(self, message_id: int) -> dict[str, Any]:

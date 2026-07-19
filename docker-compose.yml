@@ -7,7 +7,7 @@
 #   1. Create instances/<name>/bot.toml (see instances/frieren/ for example)
 #   2. docker compose up -d napcat-frieren
 #   3. docker compose logs napcat-frieren    # get WebUI URL + token for QR login
-#   4. Open WebUI (http://host:6099), scan QR with QQ mobile
+#   4. SSH tunnel: ssh -L 6099:127.0.0.1:6099 user@host, open http://localhost:6099
 #   5. docker compose up -d qqbot-frieren
 #   6. docker compose logs -f qqbot-frieren  # verify connection
 #
@@ -25,8 +25,8 @@ services:
       - NAPCAT_GID=0
       - NAPCAT_UID=0
     ports:
-      - "3001:3001"   # WebSocket for qqbot
-      - "6099:6099"   # WebUI
+      - "127.0.0.1:3001:3001"   # WebSocket for qqbot
+      - "127.0.0.1:6099:6099"   # WebUI
     volumes:
       - ./instances/napcat-frieren/QQ:/app/.config/QQ
       - ./instances/napcat-frieren/config:/app/napcat/config
@@ -46,6 +46,12 @@ services:
       - ./instances/frieren:/config
     networks:
       - bot-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 networks:
   bot-network:

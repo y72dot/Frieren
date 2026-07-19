@@ -1,6 +1,5 @@
 """Tests for Event model and Plugin Protocol."""
 
-
 from src.plugin.base import Event, Plugin
 
 
@@ -24,7 +23,9 @@ class _MissingHandle:
 
 
 def test_event_creation():
-    e = Event(type="message.group", user_id=123, message="/ping", group_id=456, is_group=True)
+    e = Event(
+        type="message.group", user_id=123, message="/ping", group_id=456, is_group=True
+    )
     assert e.type == "message.group"
     assert e.user_id == 123
     assert e.message == "/ping"

@@ -123,17 +123,19 @@ def test_parse_notice_event_typed():
     from napcat import GroupPokeEvent
 
     bus = EventBus()
-    raw = GroupPokeEvent.from_dict({
-        "post_type": "notice",
-        "notice_type": "notify",
-        "sub_type": "poke",
-        "user_id": 789,
-        "target_id": 999,
-        "group_id": 101112,
-        "self_id": 3632757457,
-        "time": 1234567890,
-        "raw_info": {},
-    })
+    raw = GroupPokeEvent.from_dict(
+        {
+            "post_type": "notice",
+            "notice_type": "notify",
+            "sub_type": "poke",
+            "user_id": 789,
+            "target_id": 999,
+            "group_id": 101112,
+            "self_id": 3632757457,
+            "time": 1234567890,
+            "raw_info": {},
+        }
+    )
     event = bus.parse(raw)
     assert event is not None
     assert event.type == "notice.notify"
@@ -211,7 +213,9 @@ async def test_listener_on_and_emit():
 
     bus.on("notice", _on_notice)
 
-    notice_event = Event(type="notice.group_increase", user_id=111, group_id=222, is_group=True)
+    notice_event = Event(
+        type="notice.group_increase", user_id=111, group_id=222, is_group=True
+    )
     await bus._emit("notice", notice_event, bot)
     assert len(bot.events) == 1
     assert bot.events[0].type == "notice.group_increase"

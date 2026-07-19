@@ -114,6 +114,27 @@ async def test_reload_plugins_replaces_manager(bot_config: BotConfig):
 
 
 # -------------------------------------------------------------------
+# filter manager config propagation
+# -------------------------------------------------------------------
+
+
+def test_load_config_updates_filter_mgr():
+    """load_config() must propagate config to FilterManager after loading."""
+    b = Bot()
+    assert b.filter_mgr._config is None
+    fake_cfg = BotConfig(
+        bot=BotConfigSection(qq=999),
+        napcat=NapCatConfig(),
+        plugin=PluginConfig(),
+        logging=LoggingConfigSection(),
+    )
+    b.config = fake_cfg
+    b.filter_mgr.update_config(fake_cfg)
+    assert b.filter_mgr._config is fake_cfg
+    assert b.filter_mgr._config is not None
+
+
+# -------------------------------------------------------------------
 # stop
 # -------------------------------------------------------------------
 
