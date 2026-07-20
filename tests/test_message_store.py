@@ -266,6 +266,141 @@ def test_nickname_fallback_to_user_id():
 
 
 # -------------------------------------------------------------------
+# query (unified)
+# -------------------------------------------------------------------
+
+
+def test_query_all_defaults():
+    """query() with no args returns recent 10 messages (oldest first)."""
+    store = MessageStore(db_path=":memory:")
+    for i in range(5):
+        store.record(_make_event(i, message=f"msg{i}"))
+
+    msgs = store.query()
+    assert len(msgs) == 5
+    assert msgs[0].content == "msg0"
+    assert msgs[-1].content == "msg4"
+
+
+def test_query_keyword():
+    """query() with keyword filters by LIKE."""
+    store = MessageStore(db_path=":memory:")
+    store.record(_make_event(1, message="hello world"))
+    store.record(_make_event(2, message="goodbye"))
+
+    msgs = store.query(keyword="hello")
+    assert len(msgs) == 1
+    assert msgs[0].content == "hello world"
+
+
+def test_query_user_id():
+    """query() with user_id filters to that user."""
+    store = MessageStore(db_path=":memory:")
+    store.record(_make_event(1, user_id=111, message="a"))
+    store.record(_make_event(2, user_id=222, message="b"))
+
+    msgs = store.query(user_id=111)
+    assert len(msgs) == 1
+    assert msgs[0].user_id == 111
+
+
+def test_query_time_after():
+    """query() with time_after filters messages after timestamp."""
+    store = MessageStore(db_path=":memory:")
+    store.record(_make_event(1, message="old"))
+    store.record(_make_event(2, message="new"))
+
+    msgs = store.query(time_after=1002)
+    assert len(msgs) == 1
+    assert msgs[0].message_id == 2
+
+
+def test_query_time_before():
+    """query() with time_before filters messages before timestamp."""
+    store = MessageStore(db_path=":memory:")
+    store.record(_make_event(1, message="old"))
+    store.record(_make_event(2, message="new"))
+
+    msgs = store.query(time_before=1001)
+    assert len(msgs) == 1
+    assert msgs[0].message_id == 1
+
+
+def test_query_combined():
+    """query() with multiple params uses AND semantics."""
+    store = MessageStore(db_path=":memory:")
+    store.record(_make_event(1, user_id=111, message="hello"))
+    store.record(_make_event(2, user_id=222, message="hello"))
+    store.record(_make_event(3, user_id=111, message="bye"))
+
+    msgs = store.query(user_id=111, keyword="hello")
+    assert len(msgs) == 1
+    assert msgs[0].message_id == 1
+
+
+def test_query_exclude_user_ids():
+    """query() skips messages from excluded users."""
+    store = MessageStore(db_path=":memory:")
+    store.record(_make_event(1, user_id=111, message="a"))
+    store.record(_make_event(2, user_id=222, message="b"))
+    store.record(_make_event(3, user_id=333, message="c"))
+
+    msgs = store.query(exclude_user_ids=[222, 333])
+    assert len(msgs) == 1
+    assert msgs[0].user_id == 111
+
+
+def test_query_is_group():
+    """query() with is_group filters by chat type."""
+    store = MessageStore(db_path=":memory:")
+    store.record(_make_event(1, group_id=456, is_group=True, message="group msg"))
+    store.record(_make_event(2, group_id=None, is_group=False, message="private msg"))
+
+    msgs = store.query(is_group=False)
+    assert len(msgs) == 1
+    assert msgs[0].content == "private msg"
+
+
+def test_query_n_limit():
+    """query() respects n limit."""
+    store = MessageStore(db_path=":memory:")
+    for i in range(20):
+        store.record(_make_event(i, message=f"msg{i}"))
+
+    msgs = store.query(n=3)
+    assert len(msgs) == 3
+
+
+def test_query_empty():
+    """query() returns empty list when no match."""
+    store = MessageStore(db_path=":memory:")
+    store.record(_make_event(1, message="hello"))
+    assert store.query(user_id=999) == []
+
+
+def test_query_time_after_before_cross():
+    """query() with time_after > time_before returns empty naturally."""
+    store = MessageStore(db_path=":memory:")
+    store.record(_make_event(1, message="test"))
+    # No message has time >= 2000 AND time <= 1000
+    msgs = store.query(time_after=2000, time_before=1000)
+    assert msgs == []
+
+
+def test_query_oldest_first():
+    """query() returns results in chronological order (oldest first)."""
+    store = MessageStore(db_path=":memory:")
+    store.record(_make_event(1, message="old"))
+    store.record(_make_event(2, message="mid"))
+    store.record(_make_event(3, message="new"))
+
+    msgs = store.query(n=10)
+    assert msgs[0].message_id == 1
+    assert msgs[1].message_id == 2
+    assert msgs[2].message_id == 3
+
+
+# -------------------------------------------------------------------
 # exclude_user_id
 # -------------------------------------------------------------------
 

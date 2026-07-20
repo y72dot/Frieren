@@ -201,6 +201,54 @@ class MessageStore:
         ).fetchall()
         return [StoredMessage(*row) for row in reversed(rows)]
 
+    def query(
+        self,
+        *,
+        group_id: int | None = None,
+        user_id: int | None = None,
+        keyword: str | None = None,
+        time_after: int | None = None,
+        time_before: int | None = None,
+        exclude_user_ids: list[int] | None = None,
+        is_group: bool | None = None,
+        n: int = 10,
+    ) -> list[StoredMessage]:
+        """Unified query with composable AND filters. Returns oldest-first."""
+        sql = (
+            "SELECT message_id, user_id, nickname, content, time, group_id "
+            "FROM messages WHERE 1=1"
+        )
+        params: list = []
+
+        if group_id is not None:
+            sql += " AND group_id=?"
+            params.append(group_id)
+        if user_id is not None:
+            sql += " AND user_id=?"
+            params.append(user_id)
+        if keyword is not None:
+            sql += " AND content LIKE ?"
+            params.append(f"%{keyword}%")
+        if time_after is not None:
+            sql += " AND time >= ?"
+            params.append(time_after)
+        if time_before is not None:
+            sql += " AND time <= ?"
+            params.append(time_before)
+        if exclude_user_ids is not None:
+            placeholders = ",".join("?" for _ in exclude_user_ids)
+            sql += f" AND user_id NOT IN ({placeholders})"
+            params.extend(exclude_user_ids)
+        if is_group is not None:
+            sql += " AND is_group=?"
+            params.append(int(is_group))
+
+        sql += " ORDER BY time DESC LIMIT ?"
+        params.append(n)
+
+        rows = self._conn.execute(sql, params).fetchall()
+        return [StoredMessage(*row) for row in reversed(rows)]
+
     # ------------------------------------------------------------------
     # maintenance
     # ------------------------------------------------------------------

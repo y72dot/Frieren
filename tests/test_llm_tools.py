@@ -21,7 +21,7 @@ class TestToolDefs:
     def test_tool_count(self):
         from plugins.llm_tools import TOOL_DEFS
 
-        assert len(TOOL_DEFS) == 7
+        assert len(TOOL_DEFS) == 8
 
     def test_all_tool_names_unique(self):
         from plugins.llm_tools import TOOL_DEFS
@@ -38,6 +38,32 @@ class TestLlmToolsHandler:
 
         result = await llm_tools_handler({"llm_type": "other"}, bot)
         assert result is False
+
+    @pytest.mark.asyncio
+    async def test_execute_get_current_time(self, bot):
+        """get_current_time returns datetime string."""
+        from plugins.llm_tools import llm_tools_handler
+        import re
+
+        tc = ToolCall(id="call_0", name="get_current_time", arguments={})
+        response_buf: dict = {}
+
+        result = await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "session_key": "group:123",
+                "tool_calls": [tc],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        assert result is False
+        assert "datetime" in response_buf["results"][0]["result"]
+        dt_str = response_buf["results"][0]["result"]["datetime"]
+        assert isinstance(dt_str, str)
+        assert re.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", dt_str)
 
     @pytest.mark.asyncio
     async def test_execute_set_essence(self, bot):
@@ -269,7 +295,7 @@ class TestLlmToolsHandler:
 class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_recent_group_messages(self, bot):
-        """query_history without args returns recent group messages."""
+        """query_history without args returns recent group messages with timestamps."""
         from plugins.llm_tools import llm_tools_handler
 
         # Insert test messages
@@ -293,8 +319,11 @@ class TestQueryHistory:
         assert len(response_buf["results"]) == 1
         text = response_buf["results"][0]["result"]["text"]
         assert "找到以下消息" in text
-        assert "[1] Alice(100): hello" in text
-        assert "[2] Bob(200): world" in text
+        # New format includes timestamp: [message_id] MM-DD HH:MM nickname(user_id): content
+        assert "Alice" in text
+        assert "hello" in text
+        assert "Bob" in text
+        assert "world" in text
 
     @pytest.mark.asyncio
     async def test_query_with_keyword(self, bot):
@@ -396,7 +425,7 @@ class TestQueryHistory:
 
     @pytest.mark.asyncio
     async def test_query_respects_limit(self, bot):
-        """query_history limit clamps at 30."""
+        """query_history limit clamps at 50."""
         from plugins.llm_tools import llm_tools_handler
 
         response_buf: dict = {}
@@ -413,13 +442,13 @@ class TestQueryHistory:
             bot,
         )
 
-        # Should not error, limit clamped to 30
+        # Should not error, limit clamped to 50
         assert len(response_buf["results"]) == 1
         assert "result" in response_buf["results"][0]
 
     @pytest.mark.asyncio
     async def test_query_excludes_bot_messages(self, bot):
-        """query_history recent excludes bot's own messages."""
+        """query_history default scope excludes bot's own messages."""
         from plugins.llm_tools import llm_tools_handler
 
         bot_qq = bot.config.bot.qq
@@ -443,3 +472,234 @@ class TestQueryHistory:
         text = response_buf["results"][0]["result"]["text"]
         assert "user msg" in text
         assert "bot msg" not in text
+
+    @pytest.mark.asyncio
+    async def test_query_bot_scope_include(self, bot):
+        """bot_scope=include returns bot messages alongside user messages."""
+        from plugins.llm_tools import llm_tools_handler
+
+        bot_qq = bot.config.bot.qq
+        bot.msg_store.record_bot_message(1, 123, bot_qq, "Bot", "bot msg", 1000, True)
+        bot.msg_store.record_bot_message(2, 123, 100, "Alice", "user msg", 1001, True)
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qh8", "function": {"name": "query_history", "arguments": '{"bot_scope": "include"}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "bot msg" in text
+        assert "user msg" in text
+
+    @pytest.mark.asyncio
+    async def test_query_bot_scope_only(self, bot):
+        """bot_scope=only returns only bot messages."""
+        from plugins.llm_tools import llm_tools_handler
+
+        bot_qq = bot.config.bot.qq
+        bot.msg_store.record_bot_message(1, 123, bot_qq, "Bot", "bot msg", 1000, True)
+        bot.msg_store.record_bot_message(2, 123, 100, "Alice", "user msg", 1001, True)
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qh9", "function": {"name": "query_history", "arguments": '{"bot_scope": "only"}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "bot msg" in text
+        assert "user msg" not in text
+
+    @pytest.mark.asyncio
+    async def test_query_bot_scope_only_conflict(self, bot):
+        """bot_scope=only + other user_id returns error."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qh10", "function": {"name": "query_history", "arguments": '{"bot_scope": "only", "user_id": 100}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "参数冲突" in text
+
+    @pytest.mark.asyncio
+    async def test_query_keyword_and_user_id_combo(self, bot):
+        """query_history with keyword+user_id uses AND semantics."""
+        from plugins.llm_tools import llm_tools_handler
+
+        bot.msg_store.record_bot_message(1, 123, 100, "Alice", "hello", 1000, True)
+        bot.msg_store.record_bot_message(2, 123, 200, "Bob", "hello", 1001, True)
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qh11", "function": {"name": "query_history", "arguments": '{"keyword": "hello", "user_id": 100}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "Alice" in text
+        assert "Bob" not in text
+
+    @pytest.mark.asyncio
+    async def test_query_time_after(self, bot):
+        """query_history with time_after filters messages."""
+        from plugins.llm_tools import llm_tools_handler
+        from datetime import datetime, timezone
+
+        bot.msg_store.record_bot_message(1, 123, 100, "Alice", "old", 1000, True)
+        bot.msg_store.record_bot_message(2, 123, 200, "Bob", "new", 2000, True)
+
+        # Compute local-time datetime string that round-trips to the Unix timestamp
+        dt_after = (
+            datetime.fromtimestamp(1500, tz=timezone.utc)
+            .astimezone()
+            .replace(tzinfo=None)
+            .strftime("%Y-%m-%d %H:%M:%S")
+        )
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qh12", "function": {"name": "query_history", "arguments": '{"time_after": "' + dt_after + '"}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "new" in text
+        assert "old" not in text
+
+    @pytest.mark.asyncio
+    async def test_query_time_before(self, bot):
+        """query_history with time_before filters messages."""
+        from plugins.llm_tools import llm_tools_handler
+        from datetime import datetime, timezone
+
+        bot.msg_store.record_bot_message(1, 123, 100, "Alice", "old", 1000, True)
+        bot.msg_store.record_bot_message(2, 123, 200, "Bob", "new", 2000, True)
+
+        dt_before = (
+            datetime.fromtimestamp(1500, tz=timezone.utc)
+            .astimezone()
+            .replace(tzinfo=None)
+            .strftime("%Y-%m-%d %H:%M:%S")
+        )
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qh13", "function": {"name": "query_history", "arguments": '{"time_before": "' + dt_before + '"}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "old" in text
+        assert "new" not in text
+
+    @pytest.mark.asyncio
+    async def test_query_private_with_keyword(self, bot):
+        """query_history in private chat supports keyword."""
+        from plugins.llm_tools import llm_tools_handler
+
+        bot.msg_store.record_bot_message(1, None, 999, "User", "hello world", 1000, False)
+        bot.msg_store.record_bot_message(2, None, 999, "User", "goodbye", 1001, False)
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qh14", "function": {"name": "query_history", "arguments": '{"keyword": "hello"}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": None,
+                "user_id": 999,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "hello" in text
+        assert "goodbye" not in text
+
+    @pytest.mark.asyncio
+    async def test_query_private_with_time(self, bot):
+        """query_history in private chat supports time_after."""
+        from plugins.llm_tools import llm_tools_handler
+        from datetime import datetime, timezone
+
+        bot.msg_store.record_bot_message(1, None, 999, "User", "old", 1000, False)
+        bot.msg_store.record_bot_message(2, None, 999, "User", "new", 2000, False)
+
+        dt_after = (
+            datetime.fromtimestamp(1500, tz=timezone.utc)
+            .astimezone()
+            .replace(tzinfo=None)
+            .strftime("%Y-%m-%d %H:%M:%S")
+        )
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qh15", "function": {"name": "query_history", "arguments": '{"time_after": "' + dt_after + '"}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": None,
+                "user_id": 999,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "new" in text
+        assert "old" not in text

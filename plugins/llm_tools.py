@@ -128,14 +128,29 @@ TOOL_DEFS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "get_current_time",
+            "description": "获取当前日期时间 (YYYY-MM-DD HH:MM:SS)。查询时间段时先调用此工具。",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "query_history",
-            "description": "查询聊天记录。需要了解上下文时主动调用。可按关键词搜索、按用户筛选、或获取最近消息。",
+            "description": "查询聊天记录。需要了解上下文时主动调用。所有参数可组合（AND语义）。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "keyword": {"type": "string", "description": "搜索关键词，不传则返回最近消息"},
+                    "keyword": {"type": "string", "description": "搜索关键词，模糊匹配消息内容"},
                     "user_id": {"type": "integer", "description": "只查特定用户的消息"},
-                    "limit": {"type": "integer", "description": "返回条数，默认10，最多30"},
+                    "limit": {"type": "integer", "description": "返回条数，默认10，最多50"},
+                    "time_after": {"type": "string", "description": "YYYY-MM-DD HH:MM:SS 格式，只返回此时间之后的消息"},
+                    "time_before": {"type": "string", "description": "YYYY-MM-DD HH:MM:SS 格式，只返回此时间之前的消息"},
+                    "bot_scope": {"type": "string", "description": "exclude(默认排除bot)/include(含bot)/only(仅bot)"},
                 },
                 "required": [],
             },
@@ -217,25 +232,57 @@ async def _execute(
         return await bot.api.set_group_ban(group_id, args["user_id"], args["duration"])
     if name == "kick_user":
         return await bot.api.set_group_kick(group_id, args["user_id"])
+    if name == "get_current_time":
+        import datetime
+        return {"datetime": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
     if name == "query_history":
+        import datetime as _dt
+        import time as _time
+
+        _UTC_OFFSET = -_time.timezone if not _time.daylight else -_time.altzone
+
+        def _parse_dt(s: str) -> int:
+            dt = _dt.datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+            delta = dt - _dt.datetime(1970, 1, 1)
+            return int(delta.total_seconds() - _UTC_OFFSET)
+
         keyword = args.get("keyword")
         uid = args.get("user_id")
-        limit = min(args.get("limit", 10), 30)
+        limit = min(args.get("limit", 10), 50) if args.get("limit") is not None else 10
+        time_after = args.get("time_after")
+        time_before = args.get("time_before")
+        bot_scope = args.get("bot_scope", "exclude")
 
-        if keyword and group_id:
-            msgs = bot.msg_store.search(group_id, keyword, n=limit)
-        elif uid and group_id:
-            msgs = bot.msg_store.by_user(group_id, uid, n=limit)
-        elif group_id:
-            msgs = bot.msg_store.recent(group_id, n=limit, exclude_user_id=bot.config.bot.qq)
+        kwargs: dict = dict(n=limit)
+        if group_id:
+            kwargs["group_id"] = group_id
+            kwargs["is_group"] = True
         else:
-            msgs = bot.msg_store.recent_private(user_id, n=limit)
+            kwargs["is_group"] = False
+
+        if keyword:
+            kwargs["keyword"] = keyword
+        if uid is not None:
+            if bot_scope == "only" and uid != bot.config.bot.qq:
+                return {"text": "参数冲突: bot_scope=only 时 user_id 只能是机器人自己的QQ号"}
+            kwargs["user_id"] = uid
+        if time_after is not None:
+            kwargs["time_after"] = _parse_dt(str(time_after))
+        if time_before is not None:
+            kwargs["time_before"] = _parse_dt(str(time_before))
+
+        if bot_scope == "only":
+            kwargs["user_id"] = bot.config.bot.qq
+        elif bot_scope == "exclude":
+            kwargs["exclude_user_ids"] = [bot.config.bot.qq]
+
+        msgs = bot.msg_store.query(**kwargs)
 
         if not msgs:
             return {"text": "没有找到相关消息。"}
 
         from plugins.llm_memory import _format_msg, _clean_content
 
-        lines = [_format_msg(m, bot.config.bot.qq) for m in msgs if _clean_content(m.content)]
+        lines = [_format_msg(m, bot.config.bot.qq, include_time=True) for m in msgs if _clean_content(m.content)]
         return {"text": "找到以下消息：\n" + "\n".join(lines)}
     return {"error": f"unknown tool: {name}"}
