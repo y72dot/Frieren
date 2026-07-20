@@ -155,3 +155,4 @@ class TestLlmGateHandle:
         assert msg.payload["text"] == "你好世界"
         assert msg.payload["user_id"] == 111
         assert msg.payload["is_group"] is True
+        assert "message_id" in msg.payload

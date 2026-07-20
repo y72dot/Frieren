@@ -21,24 +21,20 @@ class TestLlmCoreHandler:
         """Single-turn text response flow."""
         from plugins.llm_core import _lazy_init, llm_core_handler
 
-        # Pre-init session manager
+        # Pre-init tool registry
         _lazy_init(bot_with_llm)
 
         # Set up LLM to return a single text response
         provider = bot_with_llm.llm_provider
         provider.responses = [LlmResponse(text="你好，有什么可以帮你吗？")]
 
-        # Register llm_memory, llm_tools, llm_sender handlers on the bus
-        from plugins.llm_memory import llm_memory_handler
+        # Register llm_tools and llm_sender handlers on the bus
         from plugins.llm_sender import llm_sender_handler
         from plugins.llm_tools import llm_tools_handler
         from src.core.message_bus import MessageType
 
         bot_with_llm.message_bus.subscribe(
             MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
-        )
-        bot_with_llm.message_bus.subscribe(
-            MessageType.INTERNAL, _make_adapter(llm_memory_handler, "llm_memory", 20), 20
         )
         bot_with_llm.message_bus.subscribe(
             MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
@@ -72,7 +68,7 @@ class TestLlmCoreHandler:
     @pytest.mark.asyncio
     async def test_multi_turn_with_tool_calls(self, bot_with_llm):
         """Multi-turn flow: tool call then text response."""
-        from plugins.llm_core import _lazy_init, _session_mgr, llm_core_handler
+        from plugins.llm_core import _lazy_init, llm_core_handler
 
         _lazy_init(bot_with_llm)
 
@@ -94,7 +90,6 @@ class TestLlmCoreHandler:
             LlmResponse(text="已发送通知，还有什么需要帮助的吗？"),
         ]
 
-        from plugins.llm_memory import llm_memory_handler
         from plugins.llm_sender import llm_sender_handler
         from plugins.llm_tools import llm_tools_handler
         from src.core.message_bus import MessageType
@@ -103,14 +98,8 @@ class TestLlmCoreHandler:
             MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
         )
         bot_with_llm.message_bus.subscribe(
-            MessageType.INTERNAL, _make_adapter(llm_memory_handler, "llm_memory", 20), 20
-        )
-        bot_with_llm.message_bus.subscribe(
             MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
         )
-
-        # Clear any stale session
-        _session_mgr.clear("group:123")
 
         result = await llm_core_handler(
             {
@@ -139,7 +128,7 @@ class TestLlmCoreHandler:
     @pytest.mark.asyncio
     async def test_tool_call_to_sender_fallback(self, bot_with_llm):
         """When LLM returns tool_calls repeatedly, max_turns triggers final reply."""
-        from plugins.llm_core import _lazy_init, _session_mgr, llm_core_handler
+        from plugins.llm_core import _lazy_init, llm_core_handler
 
         _lazy_init(bot_with_llm)
 
@@ -159,7 +148,6 @@ class TestLlmCoreHandler:
         # After 3 tool call turns, the fallback (no tools) call returns text
         provider.responses = [tool_response] * 3 + [LlmResponse(text="够了")]
 
-        from plugins.llm_memory import llm_memory_handler
         from plugins.llm_sender import llm_sender_handler
         from plugins.llm_tools import llm_tools_handler
         from src.core.message_bus import MessageType
@@ -168,13 +156,8 @@ class TestLlmCoreHandler:
             MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
         )
         bot_with_llm.message_bus.subscribe(
-            MessageType.INTERNAL, _make_adapter(llm_memory_handler, "llm_memory", 20), 20
-        )
-        bot_with_llm.message_bus.subscribe(
             MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
         )
-
-        _session_mgr.clear("group:123")
 
         result = await llm_core_handler(
             {
@@ -196,14 +179,13 @@ class TestLlmCoreHandler:
     @pytest.mark.asyncio
     async def test_empty_reply_not_sent(self, bot_with_llm):
         """Empty LLM responses are not forwarded to sender."""
-        from plugins.llm_core import _lazy_init, _session_mgr, llm_core_handler
+        from plugins.llm_core import _lazy_init, llm_core_handler
 
         _lazy_init(bot_with_llm)
 
         provider = bot_with_llm.llm_provider
         provider.responses = [LlmResponse(text="")]
 
-        from plugins.llm_memory import llm_memory_handler
         from plugins.llm_sender import llm_sender_handler
         from plugins.llm_tools import llm_tools_handler
         from src.core.message_bus import MessageType
@@ -212,13 +194,8 @@ class TestLlmCoreHandler:
             MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
         )
         bot_with_llm.message_bus.subscribe(
-            MessageType.INTERNAL, _make_adapter(llm_memory_handler, "llm_memory", 20), 20
-        )
-        bot_with_llm.message_bus.subscribe(
             MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
         )
-
-        _session_mgr.clear("group:123")
 
         await llm_core_handler(
             {
@@ -239,6 +216,149 @@ class TestLlmCoreHandler:
             if c.get("method") == "send_group_msg"
         ]
         assert len(send_calls) == 0
+
+
+class TestSessionCache:
+    @pytest.mark.asyncio
+    async def test_session_reuse_within_ttl(self, bot_with_llm):
+        """Same session_key within TTL reuses messages list."""
+        from plugins.llm_core import _lazy_init, llm_core_handler, _session_cache
+
+        _session_cache.clear()
+        _lazy_init(bot_with_llm)
+
+        provider = bot_with_llm.llm_provider
+        provider.responses = [
+            LlmResponse(text="first reply"),
+            LlmResponse(text="second reply"),
+        ]
+
+        from plugins.llm_sender import llm_sender_handler
+        from plugins.llm_tools import llm_tools_handler
+        from src.core.message_bus import MessageType
+
+        bot_with_llm.message_bus.subscribe(
+            MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
+        )
+        bot_with_llm.message_bus.subscribe(
+            MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
+        )
+
+        payload = {
+            "llm_type": "trigger",
+            "session_key": "group:123",
+            "user_id": 111,
+            "group_id": 123,
+            "is_group": True,
+            "text": "hello",
+            "nickname": "测试用户",
+        }
+
+        # First call: creates fresh session [system, user]
+        await llm_core_handler(payload, bot_with_llm)
+        assert len(provider.calls) == 1
+        assert len(provider.calls[0]["messages"]) == 2  # system + user
+
+        # Second call: reuses session, appends new user message
+        await llm_core_handler(payload, bot_with_llm)
+        assert len(provider.calls) == 2
+        # Should have system + previous assistant + new user (3 messages)
+        assert len(provider.calls[1]["messages"]) >= 3
+
+        # Session is still cached
+        assert "group:123" in _session_cache
+
+    @pytest.mark.asyncio
+    async def test_session_ttl_zero_always_fresh(self, bot_with_llm):
+        """session_ttl=0 disables cache, every call starts fresh."""
+        from plugins.llm_core import _lazy_init, llm_core_handler, _session_cache
+
+        _session_cache.clear()
+        _lazy_init(bot_with_llm)
+
+        bot_with_llm.config.llm.session_ttl = 0
+
+        provider = bot_with_llm.llm_provider
+        provider.responses = [
+            LlmResponse(text="first"),
+            LlmResponse(text="second"),
+        ]
+
+        from plugins.llm_sender import llm_sender_handler
+        from plugins.llm_tools import llm_tools_handler
+        from src.core.message_bus import MessageType
+
+        bot_with_llm.message_bus.subscribe(
+            MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
+        )
+        bot_with_llm.message_bus.subscribe(
+            MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
+        )
+
+        payload = {
+            "llm_type": "trigger",
+            "session_key": "group:123",
+            "user_id": 111,
+            "group_id": 123,
+            "is_group": True,
+            "text": "hello",
+            "nickname": "测试用户",
+        }
+
+        await llm_core_handler(payload, bot_with_llm)
+        await llm_core_handler(payload, bot_with_llm)
+
+        # Both calls should be fresh 2-message sessions
+        assert len(provider.calls) == 2
+        assert len(provider.calls[0]["messages"]) == 2
+        assert len(provider.calls[1]["messages"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_session_expired_after_ttl(self, bot_with_llm, monkeypatch):
+        """Session entry older than TTL starts a fresh session."""
+        from plugins.llm_core import _lazy_init, llm_core_handler, _session_cache
+
+        _session_cache.clear()
+        _lazy_init(bot_with_llm)
+
+        provider = bot_with_llm.llm_provider
+        provider.responses = [
+            LlmResponse(text="first"),
+            LlmResponse(text="second"),
+        ]
+
+        from plugins.llm_sender import llm_sender_handler
+        from plugins.llm_tools import llm_tools_handler
+        from src.core.message_bus import MessageType
+
+        bot_with_llm.message_bus.subscribe(
+            MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
+        )
+        bot_with_llm.message_bus.subscribe(
+            MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
+        )
+
+        payload = {
+            "llm_type": "trigger",
+            "session_key": "group:123",
+            "user_id": 111,
+            "group_id": 123,
+            "is_group": True,
+            "text": "hello",
+            "nickname": "测试用户",
+        }
+
+        # First call with real time
+        await llm_core_handler(payload, bot_with_llm)
+        assert len(provider.calls[0]["messages"]) == 2
+
+        # Backdate the cache entry to simulate expiry
+        _session_cache["group:123"] = (0, _session_cache["group:123"][1])
+
+        # Second call: should see expired entry and start fresh
+        await llm_core_handler(payload, bot_with_llm)
+        assert len(provider.calls) == 2
+        assert len(provider.calls[1]["messages"]) == 2  # fresh session
 
 
 # ---------------------------------------------------------------------------

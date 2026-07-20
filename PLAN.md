@@ -446,7 +446,7 @@ per_group = 30                # 每群每小时最多 N 次
 ```toml
 [bot]
 qq = 1234567890
-nickname = ["小72"]
+nickname = ["芙莉莲"]
 admin_users = [9876543210]
 command_prefix = "/"
 

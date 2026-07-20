@@ -125,6 +125,22 @@ TOOL_DEFS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_history",
+            "description": "查询聊天记录。需要了解上下文时主动调用。可按关键词搜索、按用户筛选、或获取最近消息。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string", "description": "搜索关键词，不传则返回最近消息"},
+                    "user_id": {"type": "integer", "description": "只查特定用户的消息"},
+                    "limit": {"type": "integer", "description": "返回条数，默认10，最多30"},
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 
@@ -201,4 +217,25 @@ async def _execute(
         return await bot.api.set_group_ban(group_id, args["user_id"], args["duration"])
     if name == "kick_user":
         return await bot.api.set_group_kick(group_id, args["user_id"])
+    if name == "query_history":
+        keyword = args.get("keyword")
+        uid = args.get("user_id")
+        limit = min(args.get("limit", 10), 30)
+
+        if keyword and group_id:
+            msgs = bot.msg_store.search(group_id, keyword, n=limit)
+        elif uid and group_id:
+            msgs = bot.msg_store.by_user(group_id, uid, n=limit)
+        elif group_id:
+            msgs = bot.msg_store.recent(group_id, n=limit, exclude_user_id=bot.config.bot.qq)
+        else:
+            msgs = bot.msg_store.recent_private(user_id, n=limit)
+
+        if not msgs:
+            return {"text": "没有找到相关消息。"}
+
+        from plugins.llm_memory import _format_msg, _clean_content
+
+        lines = [_format_msg(m, bot.config.bot.qq) for m in msgs if _clean_content(m.content)]
+        return {"text": "找到以下消息：\n" + "\n".join(lines)}
     return {"error": f"unknown tool: {name}"}

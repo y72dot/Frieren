@@ -75,9 +75,14 @@ class _FakeApiClient:
     def clear_client(self) -> None:
         self._client = None
 
+    _msg_id_counter: int = 9000
+
     async def _raw_call(self, action: str, **params: Any) -> dict[str, Any]:
         """Direct call bypassing the bus (used by _qq_exec)."""
         self.calls.append({"method": action, **params})
+        if action in ("send_group_msg", "send_private_msg"):
+            self._msg_id_counter += 1
+            return {"message_id": self._msg_id_counter}
         return {"status": "ok"}
 
     async def send_group_msg(self, group_id: int, message: str) -> dict[str, Any]:
@@ -100,7 +105,8 @@ class _FakeApiClient:
         self.calls.append(
             {"method": "send_group_msg", "group_id": group_id, "message": message}
         )
-        return {"status": "ok"}
+        self._msg_id_counter += 1
+        return {"message_id": self._msg_id_counter}
 
     async def send_private_msg(self, user_id: int, message: str) -> dict[str, Any]:
         if self._bus is not None:
@@ -120,7 +126,8 @@ class _FakeApiClient:
         self.calls.append(
             {"method": "send_private_msg", "user_id": user_id, "message": message}
         )
-        return {"status": "ok"}
+        self._msg_id_counter += 1
+        return {"message_id": self._msg_id_counter}
 
     async def get_group_info(self, group_id: int) -> dict[str, Any]:
         self.calls.append({"method": "get_group_info", "group_id": group_id})

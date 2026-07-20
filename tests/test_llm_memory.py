@@ -1,121 +1,103 @@
-"""Tests for llm_memory – chat history injection into LLM context."""
+"""Tests for llm_memory – chat history formatting helpers."""
 
 from __future__ import annotations
 
-import pytest
-
-from src.core.llm.session import SessionManager
 from src.core.message_store import StoredMessage
 
 
-class TestLlmMemoryHandler:
-    @pytest.fixture
-    def mock_session_mgr(self, monkeypatch):
-        """Patch llm_core._session_mgr with a test instance."""
-        sm = SessionManager(max_messages=20)
-        monkeypatch.setattr("plugins.llm_core._session_mgr", sm)
-        return sm
+class TestCleanContent:
+    """Tests for _clean_content CQ code conversion."""
 
-    @pytest.mark.asyncio
-    async def test_no_match(self, bot):
-        """Returns False for non-context llm_type payloads."""
-        from plugins.llm_memory import llm_memory_handler
+    def test_reply_conversion(self):
+        from plugins.llm_memory import _clean_content
 
-        result = await llm_memory_handler({"llm_type": "other"}, bot)
-        assert result is False
+        assert _clean_content("[CQ:reply,id=1739164623]") == "回复[1739164623]"
 
-    @pytest.mark.asyncio
-    async def test_session_mgr_none_returns_false(self, bot, monkeypatch):
-        """Returns False when _session_mgr is None."""
-        monkeypatch.setattr("plugins.llm_core._session_mgr", None)
-        from plugins.llm_memory import llm_memory_handler
+    def test_at_conversion(self):
+        from plugins.llm_memory import _clean_content
 
-        result = await llm_memory_handler(
-            {"llm_type": "context", "session_key": "group:123", "is_group": True},
-            bot,
+        assert _clean_content("[CQ:at,qq=3175476491]") == "@3175476491"
+
+    def test_image_conversion(self):
+        from plugins.llm_memory import _clean_content
+
+        assert _clean_content("[CQ:image,file=abc,url=xyz]") == "[图片]"
+
+    def test_reply_and_at_combined(self):
+        from plugins.llm_memory import _clean_content
+
+        result = _clean_content("[CQ:reply,id=1739164623][CQ:at,qq=3175476491] hi")
+        assert result == "回复[1739164623] @3175476491 hi"
+
+    def test_unknown_cq_removed(self):
+        from plugins.llm_memory import _clean_content
+
+        assert _clean_content("[CQ:face,id=123]hello") == "hello"
+
+    def test_plain_text_passthrough(self):
+        from plugins.llm_memory import _clean_content
+
+        assert _clean_content("hello world") == "hello world"
+
+
+class TestFormatMsg:
+    """Tests for _format_msg with QQ number display."""
+
+    def test_shows_qq_number(self):
+        from plugins.llm_memory import _format_msg
+
+        m = StoredMessage(
+            message_id=1, user_id=100, nickname="Alice",
+            content="hello", time=1000, group_id=123,
         )
-        assert result is False
+        assert _format_msg(m) == "[1] Alice(100): hello"
 
-    @pytest.mark.asyncio
-    async def test_no_recent_messages(self, bot, mock_session_mgr, monkeypatch):
-        """No-op when msg_store has no recent messages."""
-        monkeypatch.setattr(bot.msg_store, "recent", lambda *a, **kw: [])
+    def test_fallback_nickname(self):
+        from plugins.llm_memory import _format_msg
 
-        from plugins.llm_memory import llm_memory_handler
-
-        result = await llm_memory_handler(
-            {"llm_type": "context", "session_key": "group:123", "is_group": True},
-            bot,
+        m = StoredMessage(
+            message_id=2, user_id=200, nickname=None,
+            content="hi", time=1001, group_id=123,
         )
-        assert result is False
-        msgs = await mock_session_mgr.get_messages("group:123")
-        assert msgs == []  # No context injected
+        result = _format_msg(m)
+        assert result.startswith("[2] 200(200): hi")
 
-    @pytest.mark.asyncio
-    async def test_injects_group_history(self, bot, mock_session_mgr, monkeypatch):
-        """Recent group messages are injected as context."""
-        fake_msgs = [
-            StoredMessage(
-                message_id=1,
-                user_id=100,
-                nickname="Alice",
-                content="hello",
-                time=1000,
-                group_id=123,
-            ),
-            StoredMessage(
-                message_id=2,
-                user_id=200,
-                nickname="Bob",
-                content="world",
-                time=1001,
-                group_id=123,
-            ),
-        ]
-        monkeypatch.setattr(bot.msg_store, "recent", lambda *a, **kw: fake_msgs)
+    def test_image_content_preserved(self):
+        from plugins.llm_memory import _format_msg
 
-        from plugins.llm_memory import llm_memory_handler
-
-        result = await llm_memory_handler(
-            {"llm_type": "context", "session_key": "group:123", "is_group": True},
-            bot,
+        m = StoredMessage(
+            message_id=3, user_id=300, nickname="Carol",
+            content="[CQ:image,file=img.jpg,url=http://x]",
+            time=1002, group_id=123,
         )
-        assert result is False
-        msgs = await mock_session_mgr.get_messages("group:123")
-        assert len(msgs) == 1  # One system context message
-        assert msgs[0]["role"] == "system"
-        assert "[最近聊天记录]" in msgs[0]["content"]
-        assert "Alice: hello" in msgs[0]["content"]
-        assert "Bob: world" in msgs[0]["content"]
+        assert _format_msg(m) == "[3] Carol(300): [图片]"
 
-    @pytest.mark.asyncio
-    async def test_injects_private_history(self, bot, mock_session_mgr, monkeypatch):
-        """Recent private messages are injected as context."""
-        fake_msgs = [
-            StoredMessage(
-                message_id=1,
-                user_id=999,
-                nickname="User",
-                content="private hi",
-                time=1000,
-                group_id=None,
-            ),
-        ]
-        monkeypatch.setattr(
-            bot.msg_store, "recent_private", lambda *a, **kw: fake_msgs
+    def test_reply_and_at_in_content(self):
+        from plugins.llm_memory import _format_msg
+
+        m = StoredMessage(
+            message_id=4, user_id=400, nickname="Dave",
+            content="[CQ:reply,id=1][CQ:at,qq=500] hello",
+            time=1003, group_id=123,
         )
+        assert _format_msg(m) == "[4] Dave(400): 回复[1] @500 hello"
 
-        from plugins.llm_memory import llm_memory_handler
+    def test_self_tag(self):
+        from plugins.llm_memory import _format_msg
 
-        result = await llm_memory_handler(
-            {
-                "llm_type": "context",
-                "session_key": "private:999",
-                "is_group": False,
-            },
-            bot,
+        m = StoredMessage(
+            message_id=5, user_id=3632757457, nickname="芙莉莲",
+            content="你好", time=1004, group_id=123,
         )
-        assert result is False
-        msgs = await mock_session_mgr.get_messages("private:999")
-        assert len(msgs) == 1
-        assert "private hi" in msgs[0]["content"]
+        result = _format_msg(m, bot_qq=3632757457)
+        assert result == "[5] 芙莉莲(3632757457) [自己]: 你好"
+
+    def test_self_tag_not_applied_for_other(self):
+        from plugins.llm_memory import _format_msg
+
+        m = StoredMessage(
+            message_id=6, user_id=100, nickname="Alice",
+            content="hi", time=1005, group_id=123,
+        )
+        result = _format_msg(m, bot_qq=3632757457)
+        assert result == "[6] Alice(100): hi"

@@ -28,6 +28,14 @@ class SessionManager:
         self._trim(session_key)
         logger.debug(f"Session [{session_key}] add {role}: {content[:60]}...")
 
+    async def add_message_raw(self, session_key: str, msg: dict) -> None:
+        """Append a pre-constructed message dict (e.g. assistant with tool_calls or tool result)."""
+        if session_key not in self._sessions:
+            self._sessions[session_key] = []
+        self._sessions[session_key].append(msg)
+        self._trim(session_key)
+        logger.debug(f"Session [{session_key}] add raw {msg.get('role')}: {str(msg)[:80]}...")
+
     async def add_context(self, session_key: str, context_type: str, content: str) -> None:
         """Inject system-level context (e.g. recent chat history).
 

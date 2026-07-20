@@ -81,6 +81,19 @@ class TestSessionManager:
         assert msgs[0]["content"] == "ctx"
 
     @pytest.mark.asyncio
+    async def test_add_message_raw(self, sm):
+        """add_message_raw appends pre-constructed message dicts."""
+        await sm.add_message_raw("s1", {"role": "assistant", "content": None, "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "set_essence", "arguments": '{"message_id": 1}'}}]})
+        await sm.add_message_raw("s1", {"role": "tool", "tool_call_id": "c1", "content": '{"status": "ok"}'})
+
+        msgs = await sm.get_messages("s1")
+        assert len(msgs) == 2
+        assert msgs[0]["role"] == "assistant"
+        assert msgs[0]["tool_calls"][0]["function"]["name"] == "set_essence"
+        assert msgs[1]["role"] == "tool"
+        assert msgs[1]["tool_call_id"] == "c1"
+
+    @pytest.mark.asyncio
     async def test_trim_old_messages(self, sm):
         sm = SessionManager(max_messages=3)
         for i in range(5):

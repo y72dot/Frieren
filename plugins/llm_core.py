@@ -3,31 +3,30 @@
 from __future__ import annotations
 
 import json
+import time as _time
 from typing import Any
 
 from loguru import logger
 
-from src.core.llm import SessionManager, ToolCall
+from src.core.llm import ToolCall
 from src.core.message_bus import BusMessage, MessageType
 from src.plugin.decorators import subscribe
 
 # ---------------------------------------------------------------------------
-# Module-level shared state (accessed by llm_memory / llm_tools)
+# Module-level shared state
 # ---------------------------------------------------------------------------
 
-_session_mgr: SessionManager | None = None
 _tools_registry: list[dict] = []
+# {session_key: (last_active_timestamp, messages)}
+_session_cache: dict[str, tuple[float, list[dict]]] = {}
 
 
 def _lazy_init(bot) -> None:
-    """Lazily initialize the shared SessionManager and tool registry."""
-    global _session_mgr, _tools_registry
-    if _session_mgr is not None:
+    """Lazily initialize the tool registry."""
+    global _tools_registry
+    if _tools_registry:
         return
 
-    _session_mgr = SessionManager(max_messages=bot.config.llm.max_turns * 4 + 10)
-
-    # Collect tool definitions from llm_tools module
     try:
         from plugins.llm_tools import TOOL_DEFS
 
@@ -50,40 +49,35 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
         return False
 
     _lazy_init(bot)
-    assert _session_mgr is not None
 
-    session_key: str = payload["session_key"]
     text: str = payload["text"]
     nickname: str = payload.get("nickname", "")
     is_group: bool = payload["is_group"]
+    session_key: str = payload["session_key"]
     cfg = bot.config.llm
 
-    # Add user message to session
+    # Build user content
     user_content = f"{nickname}: {text}" if is_group else text
-    await _session_mgr.add_message(session_key, "user", user_content)
 
-    # 1. Notify memory plugin to inject context
-    await bot.message_bus.emit_and_wait(
-        BusMessage(
-            type=MessageType.INTERNAL,
-            payload={
-                "llm_type": "context",
-                "session_key": session_key,
-                "is_group": is_group,
-            },
-            source="llm_core",
-        ),
-        bot,
-    )
+    # Reuse or create session based on TTL
+    ttl = cfg.session_ttl
+    now = _time.time()
+    entry = _session_cache.get(session_key)
+    if entry is not None and ttl > 0 and now - entry[0] < ttl:
+        # Reuse existing session: append new user message
+        messages = entry[1]
+        messages.append({"role": "user", "content": user_content})
+        logger.debug(f"Session [{session_key}] reused, {len(messages)} messages")
+    else:
+        messages = _new_session(cfg.system_prompt, user_content)
 
-    # 2. Build messages for LLM
-    messages: list[dict] = [{"role": "system", "content": cfg.system_prompt}]
-    messages.extend(await _session_mgr.get_messages(session_key))
+    # Touch timestamp at start
+    _session_cache[session_key] = (now, messages)
 
-    # 3. Multi-turn LLM loop
+    # Multi-turn LLM loop
     max_turns = cfg.max_turns
     for turn in range(1, max_turns + 1):
-        logger.debug(f"LLM turn {turn}/{max_turns} for [{session_key}]")
+        logger.debug(f"LLM turn {turn}/{max_turns}")
 
         response = await bot.llm_provider.chat_completion(
             messages,
@@ -97,7 +91,6 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
             # Plain text reply – send it and finish
             reply = response.text or ""
             if reply.strip():
-                await _session_mgr.add_message(session_key, "assistant", reply)
                 await bot.message_bus.emit_and_wait(
                     BusMessage(
                         type=MessageType.INTERNAL,
@@ -114,7 +107,8 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
             break
 
         # Tool calls – execute and continue
-        messages.append(_make_assistant_tool_msg(response.tool_calls))
+        assistant_tool_msg = _make_assistant_tool_msg(response.tool_calls)
+        messages.append(assistant_tool_msg)
 
         response_buf: dict[str, Any] = {}
         await bot.message_bus.emit_and_wait(
@@ -122,7 +116,7 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
                 type=MessageType.INTERNAL,
                 payload={
                     "llm_type": "tool",
-                    "session_key": session_key,
+                    "session_key": payload["session_key"],
                     "tool_calls": response.tool_calls,
                     "response_buffer": response_buf,
                     "is_group": is_group,
@@ -134,18 +128,17 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
             bot,
         )
 
-        # Append tool results to messages
+        # Append tool results to local messages
         for result in response_buf.get("results", []):
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": result["call_id"],
-                    "content": json.dumps(result["result"], ensure_ascii=False),
-                }
-            )
+            tool_msg = {
+                "role": "tool",
+                "tool_call_id": result["call_id"],
+                "content": json.dumps(result["result"], ensure_ascii=False),
+            }
+            messages.append(tool_msg)
     else:
         # Reached max_turns – force final completion without tools
-        logger.warning(f"LLM agent reached max_turns for [{session_key}], forcing final reply")
+        logger.warning("LLM agent reached max_turns, forcing final reply")
         response = await bot.llm_provider.chat_completion(
             messages,
             model=cfg.model,
@@ -154,7 +147,6 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
         )
         reply = response.text or ""
         if reply.strip():
-            await _session_mgr.add_message(session_key, "assistant", reply)
             await bot.message_bus.emit_and_wait(
                 BusMessage(
                     type=MessageType.INTERNAL,
@@ -169,12 +161,23 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
                 bot,
             )
 
+    # Update session cache timestamp after loop
+    _session_cache[session_key] = (_time.time(), messages)
+
     return False
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _new_session(system_prompt: str, user_content: str) -> list[dict]:
+    """Create a fresh messages list for a new session."""
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content},
+    ]
 
 
 def _make_assistant_tool_msg(tool_calls: list[ToolCall]) -> dict:

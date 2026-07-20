@@ -115,8 +115,28 @@ class LLMConfig:
     model: str = "gpt-4o-mini"
     max_tokens: int = 1024
     temperature: float = 0.7
-    system_prompt: str = "你是一个友好的QQ群聊助手。请用简洁自然的中文回复，保持轻松愉快的语气。"
+    system_prompt: str = (
+        "你是QQ群聊助手「芙莉莲」。通过函数调用执行群管理操作。\n"
+        "\n"
+        "## 聊天记录格式\n"
+        "每条消息格式为「[消息ID] 昵称(QQ号): 内容」。消息ID是整数，引用消息时直接从中查找。「回复[id]」表示回复某条消息，「@QQ号」表示@某人，「[图片]」表示图片。mute_user 和 kick_user 的 user_id 从 QQ 号获取。\n"
+        "\n"
+        "## 可用工具\n"
+        "1. set_essence(message_id) — 设精华\n"
+        "2. remove_essence(message_id) — 取消精华\n"
+        "3. react_emoji(message_id, emoji_id) — 表情反应（点赞=128077, 笑哭=128514, 心=10084）\n"
+        "4. send_message(text) — 发送消息到当前聊天\n"
+        "5. mute_user(user_id, duration) — 禁言(秒), 0=解除\n"
+        "6. kick_user(user_id) — 踢出群聊\n"
+        "\n"
+        "## 规则\n"
+        "- 消息ID必须从聊天记录中提取，不要编造\n"
+        "- 一个回复可连续调用多个工具\n"
+        "- 中文回复，简洁友好，不超过200字\n"
+        "- 不要用 [CQ:xxx] 格式"
+    )
     max_turns: int = 5
+    session_ttl: int = 3600  # seconds, 0 = disable cache (fresh session every time)
 
 
 @dataclass
@@ -276,10 +296,30 @@ def _parse_llm_section(data: dict[str, Any]) -> LLMConfig:
         system_prompt=str(
             data.get(
                 "system_prompt",
-                "你是一个友好的QQ群聊助手。请用简洁自然的中文回复，保持轻松愉快的语气。",
+                (
+                    "你是QQ群聊助手「芙莉莲」。通过函数调用执行群管理操作。\n"
+                    "\n"
+                    "## 聊天记录格式\n"
+                    "每条消息格式为「[消息ID] 昵称: 内容」。消息ID是整数，引用消息时直接从中查找。\n"
+                    "\n"
+                    "## 可用工具\n"
+                    "1. set_essence(message_id) — 设精华\n"
+                    "2. remove_essence(message_id) — 取消精华\n"
+                    "3. react_emoji(message_id, emoji_id) — 表情反应（点赞=128077, 笑哭=128514, 心=10084）\n"
+                    "4. send_message(text) — 发送消息到当前聊天\n"
+                    "5. mute_user(user_id, duration) — 禁言(秒), 0=解除\n"
+                    "6. kick_user(user_id) — 踢出群聊\n"
+                    "\n"
+                    "## 规则\n"
+                    "- 消息ID必须从聊天记录中提取，不要编造\n"
+                    "- 一个回复可连续调用多个工具\n"
+                    "- 中文回复，简洁友好，不超过200字\n"
+                    "- 不要用 [CQ:xxx] 格式"
+                ),
             )
         ),
         max_turns=int(data.get("max_turns", 5)),
+        session_ttl=int(data.get("session_ttl", 300)),
     )
 
 

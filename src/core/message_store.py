@@ -129,6 +129,23 @@ class MessageStore:
         )
         self._conn.commit()
 
+    def record_bot_message(
+        self,
+        message_id: int,
+        group_id: int | None,
+        user_id: int,
+        nickname: str,
+        content: str,
+        time: int,
+        is_group: bool,
+    ) -> None:
+        """Record a bot-sent message to the database."""
+        self._conn.execute(
+            "INSERT OR IGNORE INTO messages VALUES (?,?,?,?,?,?,?,datetime('now'))",
+            (message_id, group_id, user_id, nickname, content, time, int(is_group)),
+        )
+        self._conn.commit()
+
     # ------------------------------------------------------------------
     # queries
     # ------------------------------------------------------------------

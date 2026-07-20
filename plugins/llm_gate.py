@@ -39,6 +39,12 @@ class LlmGatePlugin:
         if event.user_id == bot.config.bot.qq:
             return False
 
+        # Group messages: only respond when this bot is specifically @mentioned
+        if event.is_group:
+            bot_at = f"[CQ:at,qq={bot.config.bot.qq}]"
+            if bot_at not in event.message:
+                return False
+
         # Strip CQ codes to get plain text
         plain = _CQ_PATTERN.sub("", event.message).strip()
         if not plain:
@@ -60,6 +66,7 @@ class LlmGatePlugin:
                     "is_group": event.is_group,
                     "text": plain,
                     "nickname": nickname,
+                    "message_id": event.message_id,
                 },
                 source="llm_gate",
             ),

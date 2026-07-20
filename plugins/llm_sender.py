@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from time import time
 from typing import Any
 
 from src.core.message_bus import MessageType
@@ -20,11 +21,38 @@ async def llm_sender_handler(payload: dict[str, Any], bot) -> bool:
     is_group: bool = payload["is_group"]
     text: str = payload["text"]
 
+    bot_qq = bot.config.bot.qq
+    bot_nickname = (
+        bot.config.bot.nickname[0] if bot.config.bot.nickname else str(bot_qq)
+    )
+
     for chunk in _split_message(text, _QQ_MSG_LIMIT):
         if is_group:
-            await bot.api.send_group_msg(target_id, chunk)
+            response = await bot.api.send_group_msg(target_id, chunk)
+            msg_id = response.get("message_id") if isinstance(response, dict) else None
+            if msg_id is not None:
+                bot.msg_store.record_bot_message(
+                    message_id=msg_id,
+                    group_id=target_id,
+                    user_id=bot_qq,
+                    nickname=bot_nickname,
+                    content=chunk,
+                    time=int(time()),
+                    is_group=True,
+                )
         else:
-            await bot.api.send_private_msg(target_id, chunk)
+            response = await bot.api.send_private_msg(target_id, chunk)
+            msg_id = response.get("message_id") if isinstance(response, dict) else None
+            if msg_id is not None:
+                bot.msg_store.record_bot_message(
+                    message_id=msg_id,
+                    group_id=None,
+                    user_id=bot_qq,
+                    nickname=bot_nickname,
+                    content=chunk,
+                    time=int(time()),
+                    is_group=False,
+                )
 
     return False
 

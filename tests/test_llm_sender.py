@@ -67,7 +67,7 @@ async def test_sender_handler_no_match():
 
 @pytest.mark.asyncio
 async def test_sender_dispatches_group_message(bot):
-    """Sender sends group messages correctly."""
+    """Sender sends group messages and records them to msg_store."""
     from plugins.llm_sender import llm_sender_handler
 
     result = await llm_sender_handler(
@@ -85,10 +85,18 @@ async def test_sender_dispatches_group_message(bot):
     assert bot.api.calls[0]["group_id"] == 12345
     assert bot.api.calls[0]["message"] == "hello world"
 
+    # Verify bot message was recorded to msg_store
+    msgs = bot.msg_store.recent(12345)
+    assert len(msgs) == 1
+    assert msgs[0].user_id == bot.config.bot.qq
+    assert msgs[0].nickname == "test"
+    assert msgs[0].content == "hello world"
+    assert msgs[0].group_id == 12345
+
 
 @pytest.mark.asyncio
 async def test_sender_dispatches_private_message(bot):
-    """Sender sends private messages correctly."""
+    """Sender sends private messages and records them to msg_store."""
     from plugins.llm_sender import llm_sender_handler
 
     result = await llm_sender_handler(
@@ -106,10 +114,16 @@ async def test_sender_dispatches_private_message(bot):
     assert bot.api.calls[0]["user_id"] == 999
     assert bot.api.calls[0]["message"] == "private hi"
 
+    # Verify bot message was recorded to msg_store
+    msgs = bot.msg_store.recent_private(bot.config.bot.qq)
+    assert len(msgs) == 1
+    assert msgs[0].content == "private hi"
+    assert msgs[0].group_id is None
+
 
 @pytest.mark.asyncio
 async def test_sender_chunks_long_message(bot):
-    """Long messages are split into multiple sends."""
+    """Long messages are split into multiple sends, each recorded."""
     from plugins.llm_sender import llm_sender_handler
 
     long_text = "A" * (_QQ_MSG_LIMIT + 500)
@@ -124,3 +138,7 @@ async def test_sender_chunks_long_message(bot):
     )
     assert result is False
     assert len(bot.api.calls) == 2
+
+    # Both chunks recorded in msg_store
+    msgs = bot.msg_store.recent(12345)
+    assert len(msgs) == 2

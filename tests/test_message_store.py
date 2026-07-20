@@ -281,3 +281,98 @@ def test_recent_exclude_user():
     assert all(m.user_id != 222 for m in msgs)
     assert msgs[0].user_id == 111
     assert msgs[1].user_id == 333
+
+
+# -------------------------------------------------------------------
+# record_bot_message
+# -------------------------------------------------------------------
+
+
+def test_record_bot_message_group():
+    """Bot group message is inserted and queryable via recent()."""
+    store = MessageStore(db_path=":memory:")
+    store.record_bot_message(
+        message_id=100,
+        group_id=456,
+        user_id=999,
+        nickname="MyBot",
+        content="hello from bot",
+        time=2000,
+        is_group=True,
+    )
+
+    msgs = store.recent(456, n=10)
+    assert len(msgs) == 1
+    assert msgs[0].message_id == 100
+    assert msgs[0].user_id == 999
+    assert msgs[0].nickname == "MyBot"
+    assert msgs[0].content == "hello from bot"
+    assert msgs[0].group_id == 456
+
+
+def test_record_bot_message_private():
+    """Bot private message is inserted and queryable via recent_private()."""
+    store = MessageStore(db_path=":memory:")
+    store.record_bot_message(
+        message_id=200,
+        group_id=None,
+        user_id=999,
+        nickname="MyBot",
+        content="private reply",
+        time=3000,
+        is_group=False,
+    )
+
+    msgs = store.recent_private(999)
+    assert len(msgs) == 1
+    assert msgs[0].content == "private reply"
+    assert msgs[0].group_id is None
+
+
+def test_record_bot_message_dedup():
+    """INSERT OR IGNORE prevents duplicate bot message_id."""
+    store = MessageStore(db_path=":memory:")
+    store.record_bot_message(
+        message_id=100,
+        group_id=456,
+        user_id=999,
+        nickname="MyBot",
+        content="first",
+        time=2000,
+        is_group=True,
+    )
+    store.record_bot_message(
+        message_id=100,
+        group_id=456,
+        user_id=999,
+        nickname="MyBot",
+        content="duplicate",
+        time=2000,
+        is_group=True,
+    )
+
+    msgs = store.recent(456)
+    assert len(msgs) == 1
+    assert msgs[0].content == "first"
+
+
+def test_record_bot_message_mixed_with_user():
+    """Bot and user messages coexist in recent() results, ordered by time."""
+    store = MessageStore(db_path=":memory:")
+    store.record(_make_event(1, user_id=111, message="user msg"))
+    store.record_bot_message(
+        message_id=2,
+        group_id=456,
+        user_id=999,
+        nickname="MyBot",
+        content="bot reply",
+        time=1002,
+        is_group=True,
+    )
+    store.record(_make_event(3, user_id=222, message="another user"))
+
+    msgs = store.recent(456, n=10)
+    assert len(msgs) == 3
+    assert msgs[0].content == "user msg"
+    assert msgs[1].content == "bot reply"
+    assert msgs[2].content == "another user"
