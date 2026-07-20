@@ -72,7 +72,7 @@ class _NonConsumingPlugin:
 
 
 # -------------------------------------------------------------------
-# register / unregister
+# register
 # -------------------------------------------------------------------
 
 
@@ -86,20 +86,6 @@ def test_register_adds_and_sorts():
     names = [p.name for p in pm.plugins]
     assert "echo" in names
     assert "ping" in names
-
-
-def test_unregister_existing():
-    bus = MessageBus()
-    pm = PluginManager(bus=bus)
-    pm.register(_PingPlugin())
-    assert pm.unregister("ping") is True
-    assert pm.plugin_count == 0
-
-
-def test_unregister_missing():
-    bus = MessageBus()
-    pm = PluginManager(bus=bus)
-    assert pm.unregister("nope") is False
 
 
 # -------------------------------------------------------------------

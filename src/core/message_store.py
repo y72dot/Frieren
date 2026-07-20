@@ -206,6 +206,7 @@ class MessageStore:
         *,
         group_id: int | None = None,
         user_id: int | None = None,
+        message_id: int | None = None,
         keyword: str | None = None,
         time_after: int | None = None,
         time_before: int | None = None,
@@ -223,6 +224,9 @@ class MessageStore:
         if group_id is not None:
             sql += " AND group_id=?"
             params.append(group_id)
+        if message_id is not None:
+            sql += " AND message_id=?"
+            params.append(message_id)
         if user_id is not None:
             sql += " AND user_id=?"
             params.append(user_id)

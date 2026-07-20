@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from src.core.bot import Bot
 
 _CQ_PATTERN = re.compile(r"\[CQ:[^\]]+\]")
+_CQ_REPLY = re.compile(r"\[CQ:reply,id=(-?\d+)\]")
 
 
 class LlmGatePlugin:
@@ -45,8 +46,9 @@ class LlmGatePlugin:
             if bot_at not in event.message:
                 return False
 
-        # Strip CQ codes to get plain text
-        plain = _CQ_PATTERN.sub("", event.message).strip()
+        # Strip CQ codes but preserve reply info as readable text
+        plain = _CQ_REPLY.sub(r"[回复\1]", event.message)
+        plain = _CQ_PATTERN.sub("", plain).strip()
         if not plain:
             return False
 

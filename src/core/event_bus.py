@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
-from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -31,72 +29,12 @@ except ImportError:  # pragma: no cover
     _NAPCAT_AVAILABLE = False
 
 
-# Async listener type — sync listeners are wrapped in _normalise().
-Listener = Callable[[Event, "Bot"], Awaitable[Any]]
-
-
-def _normalise(callback: Callable[[Event, Bot], Any]) -> Listener:
-    """Wrap a synchronous callback so it can be awaited.
-
-    If *callback* is already a coroutine function, it is returned as-is.
-    """
-    if inspect.iscoroutinefunction(callback):
-        return callback  # type: ignore[return-value]
-
-    async def _wrapper(event: Event, bot: Bot) -> Any:
-        return callback(event, bot)
-
-    _wrapper.__name__ = callback.__name__
-    _wrapper.__wrapped__ = callback  # type: ignore[attr-defined]
-    return _wrapper
-
-
 class EventBus:
     """Parses raw napcat-sdk events into internal :class:`Event` objects
     and dispatches them through the :class:`MessageBus`."""
 
     def __init__(self) -> None:
-        self._listeners: dict[str, list[Listener]] = {}
-
-    # ------------------------------------------------------------------
-    # listener management (Phase 2+)
-    # ------------------------------------------------------------------
-
-    def on(self, event_prefix: str, callback: Callable[[Event, Bot], Any]) -> None:
-        """Register a listener for events whose type starts with *event_prefix*.
-
-        Synchronous callbacks are wrapped so every registered listener is
-        await-able, avoiding per-invocation :func:`inspect` overhead.
-        """
-        async_cb = _normalise(callback)
-        self._listeners.setdefault(event_prefix, []).append(async_cb)
-
-    def off(self, event_prefix: str, callback: Callable[[Event, Bot], Any]) -> None:
-        """Remove a previously registered listener."""
-        lst = self._listeners.get(event_prefix)
-        if lst is None:
-            return
-        # Remove the wrapped version if it matches
-        for wrapped in list(lst):
-            if getattr(wrapped, "__wrapped__", None) is callback:
-                lst.remove(wrapped)
-                break
-        if callback in lst:
-            lst.remove(callback)
-        if not lst:
-            del self._listeners[event_prefix]
-
-    async def _emit(self, event_prefix: str, event: Event, bot: Bot) -> None:
-        """Call all listeners matching *event_prefix*."""
-        for prefix, listeners in self._listeners.items():
-            if event.type.startswith(prefix):
-                for cb in listeners:
-                    try:
-                        await cb(event, bot)
-                    except Exception:
-                        logger.opt(exception=True).error(
-                            f"Listener {cb.__name__!r} raised an exception"
-                        )
+        pass
 
     # ------------------------------------------------------------------
     # parsing
@@ -223,7 +161,6 @@ class EventBus:
            the bus (plugins run in priority order).
         3. Flush the bus queue to process any ACTION / INTERNAL messages
            emitted by plugins.
-        4. Fall back to legacy listeners if no plugin consumed the event.
         """
         event = self.parse(raw_event)
         if event is None:
@@ -255,12 +192,3 @@ class EventBus:
 
         if consumed:
             logger.debug(f"Event consumed by bus: {event.type}")
-            return
-
-        # Legacy fallback: emit to raw listeners.
-        logger.debug(
-            f"Event not consumed, falling back to legacy listeners: {event.type}"
-        )
-        parts = event.type.split(".", 1)
-        if parts:
-            await self._emit(parts[0], event, bot)

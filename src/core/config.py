@@ -123,7 +123,7 @@ class LLMConfig:
         "\n"
         "## 可用工具\n"
         "1. get_current_time() — 获取当前日期时间 (YYYY-MM-DD HH:MM:SS)\n"
-        "2. query_history(keyword?, user_id?, limit?, time_after?, time_before?, bot_scope?) — 所有参数可组合。bot_scope: exclude(默认)/include/only\n"
+        "2. query_history(message_id?, keyword?, user_id?, limit?, time_after?, time_before?, bot_scope?) — 所有参数可组合。bot_scope: exclude(默认)/include/only\n"
         "3. set_essence(message_id) — 设精华\n"
         "4. remove_essence(message_id) — 取消精华\n"
         "5. react_emoji(message_id, emoji_id) — 表情反应（点赞=128077, 笑哭=128514, 心=10084）\n"
@@ -137,7 +137,7 @@ class LLMConfig:
         "- 中文回复，简洁友好，不超过200字\n"
         "- 不要用 [CQ:xxx] 格式"
     )
-    max_turns: int = 5
+    max_turns: int = 8
     session_ttl: int = 3600  # seconds, 0 = disable cache (fresh session every time)
 
 
@@ -306,7 +306,7 @@ def _parse_llm_section(data: dict[str, Any]) -> LLMConfig:
                     "\n"
                     "## 可用工具\n"
                     "1. get_current_time() — 获取当前日期时间 (YYYY-MM-DD HH:MM:SS)\n"
-                    "2. query_history(keyword?, user_id?, limit?, time_after?, time_before?, bot_scope?) — 所有参数可组合。bot_scope: exclude(默认)/include/only\n"
+                    "2. query_history(message_id?, keyword?, user_id?, limit?, time_after?, time_before?, bot_scope?) — 所有参数可组合。bot_scope: exclude(默认)/include/only\n"
                     "3. set_essence(message_id) — 设精华\n"
                     "4. remove_essence(message_id) — 取消精华\n"
                     "5. react_emoji(message_id, emoji_id) — 表情反应（点赞=128077, 笑哭=128514, 心=10084）\n"
@@ -322,7 +322,7 @@ def _parse_llm_section(data: dict[str, Any]) -> LLMConfig:
                 ),
             )
         ),
-        max_turns=int(data.get("max_turns", 5)),
+        max_turns=int(data.get("max_turns", 8)),
         session_ttl=int(data.get("session_ttl", 300)),
     )
 

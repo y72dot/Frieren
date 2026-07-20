@@ -60,18 +60,6 @@ class PluginManager:
         self._bus.subscribe(MessageType.EXTERNAL, plugin, plugin.priority)
         logger.debug(f"Plugin registered: {plugin.name} (priority={plugin.priority})")
 
-    def unregister(self, plugin_name: str) -> bool:
-        """Remove a plugin by name from both local list and the bus."""
-        before = len(self._plugins)
-        self._plugins = [p for p in self._plugins if p.name != plugin_name]
-        removed = before != len(self._plugins)
-        if removed:
-            self._bus.unsubscribe(MessageType.EXTERNAL, plugin_name)
-            logger.info(f"Plugin unregistered: {plugin_name}")
-        else:
-            logger.warning(f"Plugin not found for unregister: {plugin_name}")
-        return removed
-
     # ------------------------------------------------------------------
     # auto-discovery
     # ------------------------------------------------------------------

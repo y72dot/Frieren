@@ -6,12 +6,12 @@ from src.core.llm.provider import (
     OpenAICompatibleProvider,
     ToolCall,
 )
-from src.core.llm.session import SessionManager
+from src.core.llm.session_logger import LlmSessionLogger
 
 __all__ = [
     "LlmProvider",
     "LlmResponse",
+    "LlmSessionLogger",
     "OpenAICompatibleProvider",
-    "SessionManager",
     "ToolCall",
 ]

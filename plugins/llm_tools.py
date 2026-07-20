@@ -8,6 +8,7 @@ from typing import Any
 from loguru import logger
 
 from src.core.message_bus import MessageType
+from src.core.message_store import StoredMessage
 from src.plugin.decorators import subscribe
 
 # ---------------------------------------------------------------------------
@@ -145,6 +146,7 @@ TOOL_DEFS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "message_id": {"type": "integer", "description": "精确查找指定消息ID"},
                     "keyword": {"type": "string", "description": "搜索关键词，模糊匹配消息内容"},
                     "user_id": {"type": "integer", "description": "只查特定用户的消息"},
                     "limit": {"type": "integer", "description": "返回条数，默认10，最多50"},
@@ -242,10 +244,18 @@ async def _execute(
         _UTC_OFFSET = -_time.timezone if not _time.daylight else -_time.altzone
 
         def _parse_dt(s: str) -> int:
-            dt = _dt.datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+                try:
+                    dt = _dt.datetime.strptime(s, fmt)
+                    break
+                except ValueError:
+                    continue
+            else:
+                raise ValueError(f"无法解析时间: {s!r}")
             delta = dt - _dt.datetime(1970, 1, 1)
             return int(delta.total_seconds() - _UTC_OFFSET)
 
+        msg_id = args.get("message_id")
         keyword = args.get("keyword")
         uid = args.get("user_id")
         limit = min(args.get("limit", 10), 50) if args.get("limit") is not None else 10
@@ -260,6 +270,8 @@ async def _execute(
         else:
             kwargs["is_group"] = False
 
+        if msg_id is not None:
+            kwargs["message_id"] = msg_id
         if keyword:
             kwargs["keyword"] = keyword
         if uid is not None:
@@ -277,6 +289,23 @@ async def _execute(
             kwargs["exclude_user_ids"] = [bot.config.bot.qq]
 
         msgs = bot.msg_store.query(**kwargs)
+
+        has_other_filters = bool(keyword or uid is not None or time_after is not None or time_before is not None)
+        if not msgs and msg_id is not None and not has_other_filters:
+            try:
+                raw = await bot.api.get_msg(msg_id)
+                data = raw.get("data", raw)
+                sender = data.get("sender", {})
+                _uid = sender.get("user_id", 0)
+                _nick = sender.get("nickname", "") or sender.get("card", "")
+                _content = data.get("message", data.get("raw_message", "")) or json.dumps(data, ensure_ascii=False)
+                _time = data.get("time", 0)
+                msgs = [StoredMessage(
+                    message_id=msg_id, user_id=_uid, nickname=_nick,
+                    content=str(_content), time=_time, group_id=group_id,
+                )]
+            except Exception:
+                pass
 
         if not msgs:
             return {"text": "没有找到相关消息。"}

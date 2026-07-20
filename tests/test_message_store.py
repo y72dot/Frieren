@@ -400,6 +400,19 @@ def test_query_oldest_first():
     assert msgs[2].message_id == 3
 
 
+def test_query_by_message_id():
+    """query() with message_id returns the exact message."""
+    store = MessageStore(db_path=":memory:")
+    store.record(_make_event(1, message="first"))
+    store.record(_make_event(2, message="second"))
+    store.record(_make_event(3, message="third"))
+
+    msgs = store.query(message_id=2)
+    assert len(msgs) == 1
+    assert msgs[0].message_id == 2
+    assert msgs[0].content == "second"
+
+
 # -------------------------------------------------------------------
 # exclude_user_id
 # -------------------------------------------------------------------

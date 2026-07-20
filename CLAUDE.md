@@ -21,15 +21,16 @@ No NoneBot / AstrBot / Koishi — core is self-written.
 
 ### Core Subsystems
 
-| 子系统            | 职责                                                         |
-| ----------------- | ------------------------------------------------------------ |
-| `MessageBus`    | 中央总线，所有插件订阅和 API 调用都经过它                    |
-| `FilterManager` | 统一过滤（全局 + 插件级），挂载于 `bot.filter_mgr`，dispatch 前拦截 |
-| `EventBus`      | 原始 napcat 事件 → 内部`Event`；记录历史；触发总线 dispatch |
-| `MessageStore`  | SQLite 持久化消息历史，插件可通过 `bot.msg_store` 同步查询   |
-| `PluginManager` | 扫描/导入/注册插件到总线 EXTERNAL 队列；`@subscribe` 适配器  |
-| `ApiClient`     | API 调用包装成 ACTION 消息入队，由`_QQExec` 最终执行       |
-| `action_queue`  | p=1 拦截所有 ACTION，四层过滤：block → bypass → spam(去重) → rate-limit |
+| 子系统               | 职责                                                                           |
+| -------------------- | ------------------------------------------------------------------------------ |
+| `MessageBus`       | 中央总线，所有插件订阅和 API 调用都经过它                                      |
+| `FilterManager`    | 统一过滤（全局 + 插件级），挂载于`bot.filter_mgr`，dispatch 前拦截           |
+| `EventBus`         | 原始 napcat 事件 → 内部`Event`；记录历史；触发总线 dispatch                 |
+| `MessageStore`     | SQLite 持久化消息历史，插件可通过`bot.msg_store` 同步查询                    |
+| `PluginManager`    | 扫描/导入/注册插件到总线 EXTERNAL 队列；`@subscribe` 适配器                  |
+| `ApiClient`        | API 调用包装成 ACTION 消息入队，由`_QQExec` 最终执行                         |
+| `action_queue`     | p=1 拦截所有 ACTION，四层过滤：block → bypass → spam(去重) → rate-limit     |
+| `LlmSessionLogger` | 每会话 LLM 对话日志 →`logs/llm_sessions/`，loguru sink + session-key filter |
 
 ### Message Types & Dispatch Semantics
 
@@ -87,10 +88,10 @@ napcat 原始类型 → `Event.type`：
 
 - loguru `contextualize(trace_id=...)` 实现全链路追踪：`MessageBus.dispatch()` 对 EXTERNAL 类型设 trace_id，ACTION/INTERNAL/LIFECYCLE 用 `nullcontext()` 继承外层
 - `BusMessage.trace_id` = uuid4 hex[:8]，grep 一个 id 即可还原事件从进入到 API 调用的完整链路
-- 格式：控制台 `{extra}` 渲染为 trace_id 标签，无 context 时为空
+- `logs/llm_sessions/`：每会话独立日志，`LlmSessionLogger` 通过 session-key filter 写入
 - 日志级别：连接/断开/模式/重连 → INFO；match/handle/API调用/事件解析 → DEBUG
+- **注意**：`llm_core` 的 `_session_cache` 是内存 dict，bot 重启即清空，即使 TTL 未过期也会触发 `[NEW]`
 
 ### Startup
 
 - `scripts/run.sh`：杀掉旧进程后启动，实时输出到控制台 + 追加到 `logs/bot.log`，Ctrl+C 停止
-- Windows 下需 WSL 或直接用 `python -m src.main`

@@ -8,7 +8,7 @@ from typing import Any
 
 from loguru import logger
 
-from src.core.llm import ToolCall
+from src.core.llm import LlmSessionLogger, ToolCall
 from src.core.message_bus import BusMessage, MessageType
 from src.plugin.decorators import subscribe
 
@@ -54,6 +54,8 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
     nickname: str = payload.get("nickname", "")
     is_group: bool = payload["is_group"]
     session_key: str = payload["session_key"]
+    session_log = LlmSessionLogger(session_key)
+    session_log.trigger(nickname, text, is_group)
     cfg = bot.config.llm
 
     # Build user content
@@ -68,8 +70,10 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
         messages = entry[1]
         messages.append({"role": "user", "content": user_content})
         logger.debug(f"Session [{session_key}] reused, {len(messages)} messages")
+        session_log.session_reuse(len(messages), now - entry[0])
     else:
         messages = _new_session(cfg.system_prompt, user_content)
+        session_log.session_new(len(messages))
 
     # Touch timestamp at start
     _session_cache[session_key] = (now, messages)
@@ -78,6 +82,8 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
     max_turns = cfg.max_turns
     for turn in range(1, max_turns + 1):
         logger.debug(f"LLM turn {turn}/{max_turns}")
+        session_log.turn_start(turn, max_turns)
+        session_log.request(messages, cfg.model, len(_tools_registry))
 
         response = await bot.llm_provider.chat_completion(
             messages,
@@ -90,6 +96,7 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
         if not response.tool_calls:
             # Plain text reply – send it and finish
             reply = response.text or ""
+            session_log.text_response(reply)
             if reply.strip():
                 await bot.message_bus.emit_and_wait(
                     BusMessage(
@@ -104,9 +111,12 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
                     ),
                     bot,
                 )
+            if reply.strip():
+                session_log.final_text(reply)
             break
 
         # Tool calls – execute and continue
+        session_log.tool_calls_result(response.tool_calls)
         assistant_tool_msg = _make_assistant_tool_msg(response.tool_calls)
         messages.append(assistant_tool_msg)
 
@@ -130,6 +140,11 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
 
         # Append tool results to local messages
         for result in response_buf.get("results", []):
+            session_log.tool_result(
+                result["call_id"],
+                result.get("name", "?"),
+                json.dumps(result["result"], ensure_ascii=False),
+            )
             tool_msg = {
                 "role": "tool",
                 "tool_call_id": result["call_id"],
@@ -139,6 +154,7 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
     else:
         # Reached max_turns – force final completion without tools
         logger.warning("LLM agent reached max_turns, forcing final reply")
+        session_log.max_turns_forced()
         response = await bot.llm_provider.chat_completion(
             messages,
             model=cfg.model,
@@ -146,6 +162,7 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
             temperature=cfg.temperature,
         )
         reply = response.text or ""
+        session_log.text_response(reply)
         if reply.strip():
             await bot.message_bus.emit_and_wait(
                 BusMessage(
@@ -160,9 +177,11 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
                 ),
                 bot,
             )
+            session_log.final_text(reply)
 
     # Update session cache timestamp after loop
     _session_cache[session_key] = (_time.time(), messages)
+    session_log.session_end(turn)
 
     return False
 

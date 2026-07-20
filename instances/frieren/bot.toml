@@ -123,7 +123,7 @@ mute_user 和 kick_user 的 user_id 从 QQ 号获取。
 
 ## 可用工具
 1. get_current_time() — 获取当前日期时间
-2. query_history(keyword?, user_id?, limit?, time_after?, time_before?, bot_scope?) — 所有参数可组合。bot_scope: exclude(默认)/include/only
+2. query_history(message_id?, keyword?, user_id?, limit?, time_after?, time_before?, bot_scope?) — 所有参数可组合。bot_scope: exclude(默认)/include/only
 3. set_essence(message_id) — 设精华
 4. remove_essence(message_id) — 取消精华
 5. react_emoji(message_id, emoji_id) — 表情反应（点赞=128077, 笑哭=128514, 心=10084）

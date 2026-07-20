@@ -703,3 +703,109 @@ class TestQueryHistory:
         text = response_buf["results"][0]["result"]["text"]
         assert "new" in text
         assert "old" not in text
+
+    @pytest.mark.asyncio
+    async def test_query_by_message_id(self, bot):
+        """query_history with message_id returns the exact message."""
+        from plugins.llm_tools import llm_tools_handler
+
+        bot.msg_store.record_bot_message(1, 123, 100, "Alice", "first", 1000, True)
+        bot.msg_store.record_bot_message(2, 123, 200, "Bob", "second", 1001, True)
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qh16", "function": {"name": "query_history", "arguments": '{"message_id": 2}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "second" in text
+        assert "first" not in text
+
+    @pytest.mark.asyncio
+    async def test_query_message_id_and_keyword(self, bot):
+        """query_history with message_id + keyword uses AND semantics."""
+        from plugins.llm_tools import llm_tools_handler
+
+        bot.msg_store.record_bot_message(1, 123, 100, "Alice", "hello", 1000, True)
+        bot.msg_store.record_bot_message(2, 123, 200, "Bob", "hello", 1001, True)
+
+        # message_id=1 AND keyword="hello" → match
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qh17", "function": {"name": "query_history", "arguments": '{"message_id": 1, "keyword": "hello"}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "Alice" in text
+        assert "Bob" not in text
+
+        # message_id=1 AND keyword="goodbye" → no match
+        response_buf2: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qh18", "function": {"name": "query_history", "arguments": '{"message_id": 1, "keyword": "goodbye"}'}}
+                ],
+                "response_buffer": response_buf2,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text2 = response_buf2["results"][0]["result"]["text"]
+        assert "没有找到" in text2
+
+    @pytest.mark.asyncio
+    async def test_query_by_message_id_fallback(self, bot):
+        """query_history falls back to get_msg when message_id not in local store."""
+        from plugins.llm_tools import llm_tools_handler
+
+        bot.api.get_msg_response = {
+            "data": {
+                "sender": {"user_id": 999, "nickname": "Remote", "card": ""},
+                "message": "hello from remote",
+                "time": 5000,
+            }
+        }
+        async def _get_msg(msg_id):
+            return bot.api.get_msg_response
+        bot.api.get_msg = _get_msg
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qh_fb", "function": {"name": "query_history", "arguments": '{"message_id": 99999}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "找到以下消息" in text
+        assert "Remote" in text
+        assert "hello from remote" in text
