@@ -10,10 +10,12 @@ from src.core.bot import Bot
 from src.core.config import (
     BotConfig,
     BotConfigSection,
+    LLMConfig,
     LoggingConfigSection,
     NapCatConfig,
     PluginConfig,
 )
+from src.core.llm import LlmResponse
 from src.core.message_bus import MessageBus
 from src.plugin.base import Event
 from src.plugin.manager import PluginManager
@@ -261,3 +263,66 @@ def event_private() -> Event:
 def plugin_manager(bus: MessageBus) -> PluginManager:
     """An empty PluginManager backed by a fresh MessageBus."""
     return PluginManager(bus=bus)
+
+
+# -------------------------------------------------------------------
+# LLM fixtures
+# -------------------------------------------------------------------
+
+
+class FakeLlmProvider:
+    """Configurable fake LLM provider for testing.
+
+    Set ``responses`` to a list of :class:`LlmResponse` objects to
+    control the sequence of replies returned by ``chat_completion()``.
+    """
+
+    def __init__(self) -> None:
+        self.responses: list[LlmResponse] = []
+        self.calls: list[dict] = []
+        self._cursor = 0
+
+    async def chat_completion(
+        self, messages, *, tools=None, **kwargs
+    ) -> LlmResponse:
+        self.calls.append(
+            {"messages": messages, "tools": tools, **kwargs}
+        )
+        if self._cursor < len(self.responses):
+            resp = self.responses[self._cursor]
+            self._cursor += 1
+            return resp
+        # Default: empty text response
+        return LlmResponse(text="fake reply")
+
+    def reset(self) -> None:
+        """Reset call history and cursor (but keep responses)."""
+        self.calls.clear()
+        self._cursor = 0
+
+
+@pytest.fixture
+def fake_llm() -> FakeLlmProvider:
+    """A fresh FakeLlmProvider."""
+    return FakeLlmProvider()
+
+
+@pytest.fixture
+def bot_with_llm(bot_config: BotConfig) -> Bot:
+    """Bot instance with LLM enabled and a fake provider."""
+    from src.core.message_store import MessageStore
+
+    bot_config.llm = LLMConfig(
+        enabled=True,
+        api_base="https://fake-api.example.com/v1",
+        api_key="sk-fake",
+        model="fake-model",
+        max_tokens=512,
+        temperature=0.0,
+        max_turns=3,
+    )
+    b = Bot(config=bot_config)
+    b.api = _FakeApiClient()
+    b.llm_provider = FakeLlmProvider()
+    b.msg_store = MessageStore(db_path=":memory:")
+    return b

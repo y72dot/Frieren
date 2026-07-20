@@ -108,6 +108,18 @@ class ActionQueueConfig:
 
 
 @dataclass
+class LLMConfig:
+    enabled: bool = False
+    api_base: str = "https://api.openai.com/v1"
+    api_key: str = ""
+    model: str = "gpt-4o-mini"
+    max_tokens: int = 1024
+    temperature: float = 0.7
+    system_prompt: str = "你是一个友好的QQ群聊助手。请用简洁自然的中文回复，保持轻松愉快的语气。"
+    max_turns: int = 5
+
+
+@dataclass
 class BotConfig:
     bot: BotConfigSection
     napcat: NapCatConfig
@@ -115,6 +127,7 @@ class BotConfig:
     logging: LoggingConfigSection
     filter: FilterConfig = field(default_factory=FilterConfig)
     action_queue: ActionQueueConfig = field(default_factory=ActionQueueConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
     env: dict[str, str] = field(default_factory=dict)
 
 
@@ -252,6 +265,24 @@ def _parse_action_queue_section(data: dict[str, Any]) -> ActionQueueConfig:
     )
 
 
+def _parse_llm_section(data: dict[str, Any]) -> LLMConfig:
+    return LLMConfig(
+        enabled=bool(data.get("enabled", False)),
+        api_base=str(data.get("api_base", "https://api.openai.com/v1")),
+        api_key=str(data.get("api_key", "")),
+        model=str(data.get("model", "gpt-4o-mini")),
+        max_tokens=int(data.get("max_tokens", 1024)),
+        temperature=float(data.get("temperature", 0.7)),
+        system_prompt=str(
+            data.get(
+                "system_prompt",
+                "你是一个友好的QQ群聊助手。请用简洁自然的中文回复，保持轻松愉快的语气。",
+            )
+        ),
+        max_turns=int(data.get("max_turns", 5)),
+    )
+
+
 def _parse_logging_section(data: dict[str, Any]) -> LoggingConfigSection:
     return LoggingConfigSection(
         level=str(data.get("level", "INFO")),
@@ -332,9 +363,17 @@ def load_config(
     action_queue = _parse_action_queue_section(
         raw.get("plugin", {}).get("action_queue", {})
     )
+    llm = _parse_llm_section(raw.get("llm", {}))
 
     env_path = env_file if env_file else str(project_root / ".env")
     env = _load_env(Path(env_path).parent) if env_file else _load_env(project_root)
+
+    # Override api_key from .env (LLM_API_KEY first, then DEEPSEEK_API_KEY)
+    if not llm.api_key:
+        for key in ("LLM_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY"):
+            if env.get(key):
+                llm.api_key = env[key]
+                break
 
     return BotConfig(
         bot=bot,
@@ -343,5 +382,6 @@ def load_config(
         logging=logging,
         filter=filter_cfg,
         action_queue=action_queue,
+        llm=llm,
         env=env,
     )

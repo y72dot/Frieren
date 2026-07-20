@@ -8,6 +8,7 @@ dependencies = [
     "loguru>=0.7.0",
     "python-dotenv>=1.0.0",
     "aiofiles>=24.0.0",
+    "httpx>=0.28.0",
 ]
 
 [project.optional-dependencies]

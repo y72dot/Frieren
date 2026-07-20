@@ -203,7 +203,13 @@ def test_auto_discover_skips_disabled():
             "repeater",
             "history",
             "essence",
+            "sticker_react",
             "action_queue_handler",
+            "llm_gate",
+            "llm_core_handler",
+            "llm_memory_handler",
+            "llm_tools_handler",
+            "llm_sender_handler",
         ],
     )
     assert count == 0  # all plugins are disabled

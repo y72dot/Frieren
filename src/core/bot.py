@@ -36,6 +36,7 @@ class Bot:
         self.filter_mgr = FilterManager(config)
         self.event_bus = EventBus()
         self.plugin_manager = PluginManager(bus=self.message_bus)
+        self.llm_provider = None
         self._running = False
         self._main_task: asyncio.Task[None] | None = None
 
@@ -87,6 +88,18 @@ class Bot:
                 disabled=cfg.plugin.disabled_plugins,
             )
             logger.info(f"{count} plugin(s) loaded")
+
+        # Initialize LLM provider if enabled
+        if cfg.llm.enabled:
+            from src.core.llm.provider import OpenAICompatibleProvider
+
+            self.llm_provider = OpenAICompatibleProvider(
+                api_base=cfg.llm.api_base,
+                api_key=cfg.llm.api_key,
+            )
+            logger.info(f"LLM provider initialized: {cfg.llm.model} @ {cfg.llm.api_base}")
+        else:
+            logger.info("LLM is disabled")
 
         self._running = True
         self._setup_signal_handlers()

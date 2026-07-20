@@ -20,18 +20,22 @@ if [ -f .bot.pid ]; then
     rm -f .bot.pid
 fi
 
-# Export QR code from NapCat container if present
+# Export QR code from NapCat container if not already logged in
 NAPCAT_CONTAINER="${NAPCAT_CONTAINER:-napcat}"
 if docker ps --format "{{.Names}}" 2>/dev/null | grep -qx "$NAPCAT_CONTAINER"; then
-    echo "=== Waiting for NapCat QR code ==="
-    for _ in $(seq 1 30); do
-        if docker exec "$NAPCAT_CONTAINER" test -f /app/napcat/cache/qrcode.png 2>/dev/null; then
-            docker cp "$NAPCAT_CONTAINER:/app/napcat/cache/qrcode.png" qrcode.png
-            echo "QR code exported to: $(pwd)/qrcode.png"
-            break
-        fi
-        sleep 2
-    done
+    if [ ! -f qrcode.png ]; then
+        echo "=== Waiting for NapCat QR code (max 10s) ==="
+        for _ in $(seq 1 5); do
+            if docker exec "$NAPCAT_CONTAINER" test -f /app/napcat/cache/qrcode.png 2>/dev/null; then
+                docker cp "$NAPCAT_CONTAINER:/app/napcat/cache/qrcode.png" qrcode.png
+                echo "QR code exported to: $(pwd)/qrcode.png"
+                break
+            fi
+            sleep 2
+        done
+    else
+        echo "=== NapCat already logged in (qrcode.png exists locally) ==="
+    fi
 fi
 
 # Activate venv if present
