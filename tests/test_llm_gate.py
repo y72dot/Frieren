@@ -104,8 +104,8 @@ class TestLlmGateHandle:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_handle_empty_after_cq_strip(self, gate, bot):
-        """Returns False when only CQ codes remain (no plain text)."""
+    async def test_handle_pure_cq_passes_through(self, gate, bot):
+        """Pure CQ message is now passed to LLM (not silently dropped)."""
         bot.config.llm.enabled = True
         bot.llm_provider = object()
         event = Event(
@@ -116,7 +116,7 @@ class TestLlmGateHandle:
             message="[CQ:at,qq=123456]",
         )
         result = await gate.handle(event, bot)
-        assert result is False
+        assert result is True
 
     @pytest.mark.asyncio
     async def test_handle_emits_trigger(self, gate, bot):
@@ -152,7 +152,7 @@ class TestLlmGateHandle:
         assert msg.type == MessageType.INTERNAL
         assert msg.payload["llm_type"] == "trigger"
         assert msg.payload["session_key"] == "group:456"
-        assert msg.payload["text"] == "你好世界"
+        assert msg.payload["text"] == "[CQ:at,qq=123456] 你好世界"
         assert msg.payload["user_id"] == 111
         assert msg.payload["is_group"] is True
         assert "message_id" in msg.payload

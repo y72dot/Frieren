@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -13,9 +12,6 @@ from src.plugin.base import Event
 
 if TYPE_CHECKING:
     from src.core.bot import Bot
-
-_CQ_PATTERN = re.compile(r"\[CQ:[^\]]+\]")
-_CQ_REPLY = re.compile(r"\[CQ:reply,id=(-?\d+)\]")
 
 
 class LlmGatePlugin:
@@ -54,11 +50,10 @@ class LlmGatePlugin:
                 )
                 return False
 
-        # Strip CQ codes but preserve reply info as readable text
-        plain = _CQ_REPLY.sub(r"[回复\1]", event.message)
-        plain = _CQ_PATTERN.sub("", plain).strip()
+        # Strip whitespace only; keep CQ codes intact so the LLM can see them.
+        plain = event.message.strip()
         if not plain:
-            logger.debug("llm_gate: empty text after stripping CQ codes, skipping")
+            logger.debug("llm_gate: empty message, skipping")
             return False
 
         session_key = (

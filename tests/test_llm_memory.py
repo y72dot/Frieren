@@ -6,38 +6,43 @@ from src.core.message_store import StoredMessage
 
 
 class TestCleanContent:
-    """Tests for _clean_content CQ code conversion."""
+    """Tests for _clean_content – CQ codes are preserved as-is."""
 
-    def test_reply_conversion(self):
+    def test_reply_kept(self):
         from plugins.llm_memory import _clean_content
 
-        assert _clean_content("[CQ:reply,id=1739164623]") == "回复[1739164623]"
+        assert _clean_content("[CQ:reply,id=1739164623]") == "[CQ:reply,id=1739164623]"
 
-    def test_at_conversion(self):
+    def test_at_kept(self):
         from plugins.llm_memory import _clean_content
 
-        assert _clean_content("[CQ:at,qq=3175476491]") == "@3175476491"
+        assert _clean_content("[CQ:at,qq=3175476491]") == "[CQ:at,qq=3175476491]"
 
-    def test_image_conversion(self):
+    def test_image_kept(self):
         from plugins.llm_memory import _clean_content
 
-        assert _clean_content("[CQ:image,file=abc,url=xyz]") == "[图片]"
+        assert _clean_content("[CQ:image,file=abc,url=xyz]") == "[CQ:image,file=abc,url=xyz]"
 
     def test_reply_and_at_combined(self):
         from plugins.llm_memory import _clean_content
 
         result = _clean_content("[CQ:reply,id=1739164623][CQ:at,qq=3175476491] hi")
-        assert result == "回复[1739164623] @3175476491 hi"
+        assert result == "[CQ:reply,id=1739164623][CQ:at,qq=3175476491] hi"
 
-    def test_unknown_cq_removed(self):
+    def test_unknown_cq_kept(self):
         from plugins.llm_memory import _clean_content
 
-        assert _clean_content("[CQ:face,id=123]hello") == "hello"
+        assert _clean_content("[CQ:face,id=123]hello") == "[CQ:face,id=123]hello"
 
     def test_plain_text_passthrough(self):
         from plugins.llm_memory import _clean_content
 
         assert _clean_content("hello world") == "hello world"
+
+    def test_whitespace_trimmed(self):
+        from plugins.llm_memory import _clean_content
+
+        assert _clean_content("  hello  ") == "hello"
 
 
 class TestFormatMsg:
@@ -70,7 +75,7 @@ class TestFormatMsg:
             content="[CQ:image,file=img.jpg,url=http://x]",
             time=1002, group_id=123,
         )
-        assert _format_msg(m) == "[3] Carol(300): [图片]"
+        assert _format_msg(m) == "[3] Carol(300): [CQ:image,file=img.jpg,url=http://x]"
 
     def test_reply_and_at_in_content(self):
         from plugins.llm_memory import _format_msg
@@ -80,17 +85,17 @@ class TestFormatMsg:
             content="[CQ:reply,id=1][CQ:at,qq=500] hello",
             time=1003, group_id=123,
         )
-        assert _format_msg(m) == "[4] Dave(400): 回复[1] @500 hello"
+        assert _format_msg(m) == "[4] Dave(400): [CQ:reply,id=1][CQ:at,qq=500] hello"
 
     def test_self_tag(self):
         from plugins.llm_memory import _format_msg
 
         m = StoredMessage(
-            message_id=5, user_id=3632757457, nickname="芙莉莲",
+            message_id=5, user_id=3632757457, nickname="\u8299莉莲",
             content="你好", time=1004, group_id=123,
         )
         result = _format_msg(m, bot_qq=3632757457)
-        assert result == "[5] 芙莉莲(3632757457) [自己]: 你好"
+        assert result == "[5] \u8299莉莲(3632757457) [自己]: 你好"
 
     def test_self_tag_not_applied_for_other(self):
         from plugins.llm_memory import _format_msg

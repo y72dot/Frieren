@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING
 
 from src.plugin.base import Event, Plugin
 
+_CQ_STRIP = re.compile(r"\[CQ:[^\]]+\]")
+
 if TYPE_CHECKING:
     from src.core.bot import Bot
     from src.core.message_bus import MessageType
@@ -76,7 +78,7 @@ def _build_command_plugin(
             self.priority = priority
 
         def match(self, event: Event) -> bool:
-            msg = event.message.strip()
+            msg = _CQ_STRIP.sub("", event.message).strip()
             for cmd in commands:
                 if (
                     msg == cmd
