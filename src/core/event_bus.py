@@ -29,6 +29,28 @@ except ImportError:  # pragma: no cover
     _NAPCAT_AVAILABLE = False
 
 
+def _extract_forward_id(raw_event: Any) -> str | None:
+    """Extract the forward message ID from a napcat event's message segments.
+
+    Returns ``None`` if the event does not contain a forward segment.
+    """
+    # napcat-sdk typed events: message is a list of segment objects
+    if hasattr(raw_event, "message") and isinstance(raw_event.message, list):
+        for seg in raw_event.message:
+            if hasattr(seg, "type") and seg.type == "forward":
+                data = getattr(seg, "data", {}) or {}
+                return data.get("id") or data.get("message_id")
+    # dict-style events: message is a list of dict segments
+    if isinstance(raw_event, dict):
+        msg_array = raw_event.get("message", [])
+        if isinstance(msg_array, list):
+            for seg in msg_array:
+                if isinstance(seg, dict) and seg.get("type") == "forward":
+                    data = seg.get("data", {}) or {}
+                    return data.get("id") or data.get("message_id")
+    return None
+
+
 class EventBus:
     """Parses raw napcat-sdk events into internal :class:`Event` objects
     and dispatches them through the :class:`MessageBus`."""
@@ -47,12 +69,17 @@ class EventBus:
         """
         # typed message events (napcat-sdk >= 0.1)
         if GroupMessageEvent is not None and isinstance(raw_event, GroupMessageEvent):
+            msg_text = raw_event.raw_message or ""
+            if not msg_text:
+                fwd_id = _extract_forward_id(raw_event)
+                if fwd_id:
+                    msg_text = f"[CQ:forward,id={fwd_id}]"
             return Event(
                 type="message.group",
                 raw=raw_event,
                 user_id=int(raw_event.user_id),
                 message_id=int(raw_event.message_id),
-                message=raw_event.raw_message or "",
+                message=msg_text,
                 group_id=int(raw_event.group_id),
                 is_group=True,
             )
@@ -60,12 +87,17 @@ class EventBus:
         if PrivateMessageEvent is not None and isinstance(
             raw_event, PrivateMessageEvent
         ):
+            msg_text = raw_event.raw_message or ""
+            if not msg_text:
+                fwd_id = _extract_forward_id(raw_event)
+                if fwd_id:
+                    msg_text = f"[CQ:forward,id={fwd_id}]"
             return Event(
                 type="message.private",
                 raw=raw_event,
                 user_id=int(raw_event.user_id),
                 message_id=int(raw_event.message_id),
-                message=raw_event.raw_message or "",
+                message=msg_text,
                 is_group=False,
             )
 
@@ -86,6 +118,14 @@ class EventBus:
         if post_type == "message":
             msg_type = data.get("message_type", "")
             group_id = data.get("group_id")
+            raw_msg = data.get("raw_message", "")
+            msg_text = str(raw_msg) if raw_msg else ""
+            if not msg_text:
+                fwd_id = _extract_forward_id(data)
+                if fwd_id:
+                    msg_text = f"[CQ:forward,id={fwd_id}]"
+            if not msg_text:
+                msg_text = str(data.get("message", ""))
             logger.debug(
                 f"Parsed dict event: message.{msg_type}" if msg_type else "message"
             )
@@ -94,7 +134,7 @@ class EventBus:
                 raw=data,
                 user_id=int(data.get("user_id", 0)),
                 message_id=int(data.get("message_id", 0)) or None,
-                message=str(data.get("raw_message", data.get("message", ""))),
+                message=msg_text,
                 group_id=int(group_id) if group_id is not None else None,
                 is_group=msg_type == "group",
             )

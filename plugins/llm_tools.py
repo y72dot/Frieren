@@ -175,6 +175,23 @@ TOOL_DEFS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "resolve_forward",
+            "description": "解析合并转发消息的具体内容。当消息显示为 [合并转发 xxx] 时调用此工具获取其中的对话内容。支持嵌套转发。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "forward_id": {
+                        "type": "string",
+                        "description": "合并转发ID，从消息内容中的 [合并转发 xxx] 获取",
+                    }
+                },
+                "required": ["forward_id"],
+            },
+        },
+    },
 ]
 
 
@@ -221,6 +238,71 @@ async def llm_tools_handler(payload: dict[str, Any], bot) -> bool:
 # ---------------------------------------------------------------------------
 # Tool execution mapping
 # ---------------------------------------------------------------------------
+
+
+async def _resolve_forward(forward_id: str, bot, depth: int = 0) -> str:
+    """Recursively resolve merged-forward message content.
+
+    Handles nested forwards up to *depth* 3, rendering text / image /
+    at / face segments.  Returns a human-readable multi-line string.
+    """
+    if depth >= 3:
+        return "[嵌套转发层数过深，已截断]"
+
+    try:
+        raw = await bot.api.get_forward_msg(forward_id)
+        data = raw.get("data", raw)
+        messages = data.get("messages", [])
+        if not messages:
+            return "[转发内容为空]"
+    except Exception as e:
+        logger.opt(exception=True).error(f"resolve_forward({forward_id}) failed: {e}")
+        return f"[解析转发失败: {e}]"
+
+    indent = "  " * (depth + 1)
+    lines: list[str] = []
+    for msg in messages:
+        sender = msg.get("sender", {})
+        nickname = sender.get("nickname", "") or str(sender.get("user_id", "?"))
+        content = msg.get("message", "") or msg.get("raw_message", "")
+
+        if isinstance(content, list):
+            parts: list[str] = []
+            for seg in content:
+                if not isinstance(seg, dict):
+                    parts.append(str(seg))
+                    continue
+                seg_type = seg.get("type", "")
+                seg_data = seg.get("data", {}) or {}
+                if seg_type == "text":
+                    parts.append(seg_data.get("text", ""))
+                elif seg_type == "image":
+                    parts.append("[图片]")
+                elif seg_type == "forward":
+                    nested_id = seg_data.get("id", "")
+                    if nested_id:
+                        nested_text = await _resolve_forward(nested_id, bot, depth + 1)
+                        parts.append(nested_text)
+                    else:
+                        parts.append("[合并转发]")
+                elif seg_type == "at":
+                    parts.append(f"@{seg_data.get('qq', '?')}")
+                elif seg_type == "face":
+                    parts.append("[表情]")
+                elif seg_type == "reply":
+                    parts.append("[回复]")
+                else:
+                    parts.append(f"[{seg_type}]")
+            content = "".join(parts)
+        elif isinstance(content, str):
+            content = content or ""
+        else:
+            content = str(content)
+
+        lines.append(f"{indent}{nickname}: {content}")
+
+    label = "[合并转发]" if depth == 0 else "[嵌套转发]"
+    return f"{label}\n" + "\n".join(lines)
 
 
 async def _execute(
@@ -336,6 +418,9 @@ async def _execute(
         if tool_name:
             return _help_single(tool_name)
         return _help_all()
+    if name == "resolve_forward":
+        result_text = await _resolve_forward(str(args["forward_id"]), bot)
+        return {"text": result_text}
     return {"error": f"unknown tool: {name}"}
 
 
@@ -413,6 +498,13 @@ _HELP_TEXTS = {
             ("tool_name", "string", "否", "指定工具名查看详情，不传列出全部概览"),
         ],
         "example": "tool_help() — 列出所有工具\ntool_help(tool_name=\"query_history\") — 查看query_history详情",
+    },
+    "resolve_forward": {
+        "desc": "解析合并转发消息内容，支持嵌套转发",
+        "params": [
+            ("forward_id", "string", "是", "合并转发ID，从消息中的 [合并转发 xxx] 获取"),
+        ],
+        "example": "resolve_forward(forward_id=\"abc123\") — 解析该转发消息的具体对话内容",
     },
 }
 

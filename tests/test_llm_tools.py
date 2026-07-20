@@ -23,7 +23,7 @@ class TestToolDefs:
     def test_tool_count(self):
         from plugins.llm_tools import TOOL_DEFS
 
-        assert len(TOOL_DEFS) == 9
+        assert len(TOOL_DEFS) == 10
 
     def test_all_tool_names_unique(self):
         from plugins.llm_tools import TOOL_DEFS
