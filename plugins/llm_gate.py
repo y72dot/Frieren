@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from loguru import logger
+
 from src.core.message_bus import BusMessage, MessageType
 from src.core.message_store import _extract_nickname
 from src.plugin.base import Event
@@ -34,28 +36,40 @@ class LlmGatePlugin:
 
     async def handle(self, event: Event, bot: Bot) -> bool:
         if not bot.config or not bot.config.llm.enabled:
+            logger.debug("llm_gate: LLM disabled in config, skipping")
             return False
         if bot.llm_provider is None:
+            logger.debug("llm_gate: no LLM provider, skipping")
             return False
         if event.user_id == bot.config.bot.qq:
+            logger.debug("llm_gate: self-message, skipping")
             return False
 
         # Group messages: only respond when this bot is specifically @mentioned
         if event.is_group:
             bot_at = f"[CQ:at,qq={bot.config.bot.qq}]"
             if bot_at not in event.message:
+                logger.debug(
+                    f"llm_gate: group message without @bot, skipping grp={event.group_id}"
+                )
                 return False
 
         # Strip CQ codes but preserve reply info as readable text
         plain = _CQ_REPLY.sub(r"[回复\1]", event.message)
         plain = _CQ_PATTERN.sub("", plain).strip()
         if not plain:
+            logger.debug("llm_gate: empty text after stripping CQ codes, skipping")
             return False
 
         session_key = (
             f"group:{event.group_id}" if event.is_group else f"private:{event.user_id}"
         )
         nickname = _extract_nickname(event.raw, event.user_id)
+
+        logger.info(
+            f"llm_gate trigger: session={session_key} user={event.user_id} "
+            f"nickname={nickname} text={plain[:80]}"
+        )
 
         await bot.message_bus.emit_and_wait(
             BusMessage(

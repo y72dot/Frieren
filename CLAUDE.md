@@ -78,18 +78,20 @@ napcat 原始类型 → `Event.type`：
 
 ### Constraints
 
-- 插件只能用 `from src.plugin.base import Event`，禁止导入 napcat 类型
-- 不新增 `src/` 和 `plugins/` 之外的顶层 Python 目录
-- 不引入新依赖框架
+- 插件只能用 `from src.plugin.base import Event`，禁止导入 napcat 类型；不新增 `src/` 和 `plugins/` 之外的顶层目录；不引入新依赖框架
 - Phase 1 无中间件链：一个事件最多被一个插件消费
 - Commit format: `type: description` (feat/fix/refactor/test/docs/chore)
 
 ### Logging & Tracing
 
-- loguru `contextualize(trace_id=...)` 实现全链路追踪：`MessageBus.dispatch()` 对 EXTERNAL 类型设 trace_id，ACTION/INTERNAL/LIFECYCLE 用 `nullcontext()` 继承外层
-- `BusMessage.trace_id` = uuid4 hex[:8]，grep 一个 id 即可还原事件从进入到 API 调用的完整链路
-- `logs/llm_sessions/`：每会话独立日志，`LlmSessionLogger` 通过 session-key filter 写入
-- 日志级别：连接/断开/模式/重连 → INFO；match/handle/API调用/事件解析 → DEBUG
+- 格式串：`time | level | trace={extra[trace_id]} | name:func:line | message`，trace_id 固定第三列
+- grep trace_id 得完整链路：`REQUEST START`(event_bus, INFO) → `Filter pass/block`(filter_mgr, 放行原因见下) → `match/handle+耗时`(message_bus) → `API ok status/elapsed/message_id`(api_client) → `REQUEST END`(INFO)
+- Filter pass 原因：disabled / bypass(admin|bot) / whitelist / off / not_configured
+- API 日志：`API ok {action} status={status} elapsed={elapsed}ms message_id={msg_id} retcode={retcode}`
+- 插件内部通过 loguru logger 记决策点（INFO=触发，DEBUG=跳过原因），match/handle 由框架统一记录
+- LLM 流程在 `bot.log` 可见：`llm_gate trigger` → `LLM session start` → `final reply` → `llm_sender chunks` → `session end`
+- `LlmSessionLogger` 同时写 `logs/llm_sessions/`（不动）
+- 日志级别：生命周期/REQUEST 信封/插件触发/LLM关键 → INFO；match/handle/API调用/Filter → DEBUG
 - **注意**：`llm_core` 的 `_session_cache` 是内存 dict，bot 重启即清空，即使 TTL 未过期也会触发 `[NEW]`
 
 ### Startup

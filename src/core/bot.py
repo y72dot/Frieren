@@ -209,7 +209,26 @@ class Bot:
             try:
                 await self.event_bus.dispatch(raw_event, self)
             except Exception:
-                logger.opt(exception=True).error("Error dispatching event, skipping …")
+                ctx = f"type={type(raw_event).__name__}"
+                try:
+                    uid = getattr(raw_event, "user_id", None) or (
+                        raw_event.get("user_id") if isinstance(raw_event, dict) else None
+                    )
+                    if uid:
+                        ctx += f" user={uid}"
+                    gid = getattr(raw_event, "group_id", None) or (
+                        raw_event.get("group_id") if isinstance(raw_event, dict) else None
+                    )
+                    if gid:
+                        ctx += f" group={gid}"
+                    pt = getattr(raw_event, "post_type", None) or (
+                        raw_event.get("post_type") if isinstance(raw_event, dict) else None
+                    )
+                    if pt:
+                        ctx += f" post_type={pt}"
+                except Exception:
+                    pass
+                logger.opt(exception=True).error(f"Error dispatching event ({ctx}), skipping …")
 
     # ------------------------------------------------------------------
     # internal: signal handling

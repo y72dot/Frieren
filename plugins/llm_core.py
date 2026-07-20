@@ -69,10 +69,11 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
         # Reuse existing session: append new user message
         messages = entry[1]
         messages.append({"role": "user", "content": user_content})
-        logger.debug(f"Session [{session_key}] reused, {len(messages)} messages")
+        logger.info(f"LLM session reuse: key={session_key} nickname={nickname} text={text[:80]}")
         session_log.session_reuse(len(messages), now - entry[0])
     else:
         messages = _new_session(cfg.system_prompt, user_content)
+        logger.info(f"LLM session start: key={session_key} nickname={nickname} text={text[:80]}")
         session_log.session_new(len(messages))
 
     # Touch timestamp at start
@@ -113,6 +114,7 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
                 )
             if reply.strip():
                 session_log.final_text(reply)
+            logger.info(f"LLM final reply: session={session_key} len={len(reply)} chars")
             break
 
         # Tool calls – execute and continue
@@ -178,9 +180,11 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
                 bot,
             )
             session_log.final_text(reply)
+            logger.info(f"LLM final reply: session={session_key} len={len(reply)} chars")
 
     # Update session cache timestamp after loop
     _session_cache[session_key] = (_time.time(), messages)
+    logger.info(f"LLM session end: key={session_key} turns={turn}")
     session_log.session_end(turn)
 
     return False

@@ -1,3 +1,5 @@
+from loguru import logger
+
 from src.core.bot import Bot
 from src.plugin.base import Event
 from src.plugin.decorators import on_notice
@@ -22,5 +24,6 @@ async def poke_back(event: Event, bot: Bot) -> bool:
     # If the bot is the target, poke back the poker instead of self-poking
     if target == bot.config.bot.qq:
         target = event.user_id
+    logger.info(f"poke: poker={event.user_id} target={target} grp={group_id}")
     await bot.api.send_group_poke(group_id, target)
     return True

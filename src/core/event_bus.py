@@ -177,7 +177,7 @@ class EventBus:
             extra.append(f"group={event.group_id}")
         msg_preview = event.message[:200] if event.message else ""
         extra.append(f"msg='{msg_preview}'")
-        logger.debug(f"Event: {event.type} user={event.user_id} {' '.join(extra)}")
+        logger.info(f"REQUEST START: {event.type} user={event.user_id} {' '.join(extra)}")
 
         # Phase 2: route through the message bus.
         msg = BusMessage(
@@ -190,5 +190,6 @@ class EventBus:
         # Flush queued messages (ACTION / INTERNAL emitted by plugins).
         await bot.message_bus.flush(bot)
 
-        if consumed:
-            logger.debug(f"Event consumed by bus: {event.type}")
+        logger.info(
+            f"REQUEST END: type={event.type} user={event.user_id} consumed={bool(consumed)}"
+        )

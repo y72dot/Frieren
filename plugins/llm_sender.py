@@ -5,6 +5,8 @@ from __future__ import annotations
 from time import time
 from typing import Any
 
+from loguru import logger
+
 from src.core.message_bus import MessageType
 from src.plugin.decorators import subscribe
 
@@ -26,7 +28,13 @@ async def llm_sender_handler(payload: dict[str, Any], bot) -> bool:
         bot.config.bot.nickname[0] if bot.config.bot.nickname else str(bot_qq)
     )
 
-    for chunk in _split_message(text, _QQ_MSG_LIMIT):
+    chunks = _split_message(text, _QQ_MSG_LIMIT)
+    scope = "group" if is_group else "private"
+    logger.info(f"llm_sender: sending {len(chunks)} chunk(s) to {scope}:{target_id}")
+
+    for i, chunk in enumerate(chunks, 1):
+        if len(chunks) > 1:
+            logger.debug(f"llm_sender: chunk {i}/{len(chunks)} len={len(chunk)}")
         if is_group:
             response = await bot.api.send_group_msg(target_id, chunk)
             msg_id = response.get("message_id") if isinstance(response, dict) else None

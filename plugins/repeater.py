@@ -6,6 +6,8 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from loguru import logger
+
 from src.plugin.base import Event
 
 if TYPE_CHECKING:
@@ -28,6 +30,7 @@ class RepeaterPlugin:
     async def handle(self, event: Event, bot: Bot) -> bool:
         # 1. Skip bot's own messages (infinite loop prevention)
         if event.user_id == bot.config.bot.qq:
+            logger.debug("repeater: self-message, skipping")
             return False
 
         stripped = event.message.strip()
@@ -58,6 +61,9 @@ class RepeaterPlugin:
 
             # 6. Same user -> no repeat
             if msg_prev.user_id == msg_curr.user_id:
+                logger.debug(
+                    f"repeater: same_user grp={group_id} uid={msg_curr.user_id}, skipping"
+                )
                 return False
 
             # 7. Different content -> no repeat
@@ -67,10 +73,16 @@ class RepeaterPlugin:
             last_content = msg_curr.content
             # 8. Already repeated this content?
             if _last_repeated.get(group_id) == last_content:
+                logger.debug(
+                    f"repeater: already_repeated grp={group_id} content={last_content[:30]}, skipping"
+                )
                 return False
 
             # 9. Commit state and repeat
             _last_repeated[group_id] = last_content
+            logger.info(
+                f"repeater: repeat grp={group_id} uid={event.user_id} content={last_content[:50]}"
+            )
 
             await bot.api.send_group_msg(group_id, last_content)
 

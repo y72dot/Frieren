@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time as _time
 from typing import TYPE_CHECKING, Any, Protocol
 
 from loguru import logger
@@ -93,9 +94,19 @@ class ApiClient:
                 log_params[k] = v
         logger.debug(f"API call {action} {log_params}")
         try:
+            t0 = _time.time()
             method = getattr(client, action)
             result = await method(**params)  # type: ignore[no-any-return]
-            logger.debug(f"API ok {action}")
+            elapsed = (_time.time() - t0) * 1000
+            status = result.get("status") if isinstance(result, dict) else "?"
+            msg_id = result.get("message_id") if isinstance(result, dict) else None
+            retcode = result.get("retcode") if isinstance(result, dict) else None
+            parts = [f"API ok {action}", f"status={status}", f"elapsed={elapsed:.0f}ms"]
+            if msg_id is not None:
+                parts.append(f"message_id={msg_id}")
+            if retcode is not None:
+                parts.append(f"retcode={retcode}")
+            logger.debug(" ".join(parts))
             return result
         except Exception:
             logger.opt(exception=True).error(f"API call failed: {action}")

@@ -232,6 +232,7 @@ class MessageBus:
                     continue
 
                 # handle
+                t0 = time.time()
                 try:
                     result = await sub.handler.handle(msg.payload, bot)
                 except Exception:
@@ -239,8 +240,9 @@ class MessageBus:
                         f"Plugin.handle() raised: {sub.handler.name}"
                     )
                     continue
+                elapsed = (time.time() - t0) * 1000
 
-                logger.debug(f"'{sub.handler.name}'.handle() -> {bool(result)}")
+                logger.debug(f"'{sub.handler.name}'.handle() -> {bool(result)} ({elapsed:.0f}ms)")
 
                 if suppressible and result:
                     logger.debug(f"Message suppressed by '{sub.handler.name}'")
@@ -251,7 +253,14 @@ class MessageBus:
                 return None
 
             # Suppressible but not consumed.
-            logger.debug(f"Event not consumed (type={msg.type.value})")
+            ev = msg.payload
+            ev_type = getattr(ev, "type", "?")
+            ev_user = getattr(ev, "user_id", None)
+            ev_group = getattr(ev, "group_id", None)
+            ev_msg = getattr(ev, "message", "") or ""
+            logger.debug(
+                f"Event not consumed: ev_type={ev_type} user={ev_user} group={ev_group} msg='{ev_msg[:80]}'"
+            )
             return False
 
     # ------------------------------------------------------------------
@@ -311,7 +320,12 @@ class MessageBus:
             batch = self._queue[:]
             self._queue = []
 
-            logger.debug(f"Flush round {round_num}: {len(batch)} message(s)")
+            # Build distribution summary: type:source counts
+            from collections import Counter
+
+            dist = Counter(f"{m.type.value}:{m.source}" for m in batch)
+            dist_str = " ".join(f"{c}x {k}" for k, c in dist.most_common())
+            logger.debug(f"Flush round {round_num}: {len(batch)} message(s) [{dist_str}]")
 
             for msg in batch:
                 try:

@@ -21,7 +21,7 @@ class TestToolDefs:
     def test_tool_count(self):
         from plugins.llm_tools import TOOL_DEFS
 
-        assert len(TOOL_DEFS) == 8
+        assert len(TOOL_DEFS) == 9
 
     def test_all_tool_names_unique(self):
         from plugins.llm_tools import TOOL_DEFS
@@ -448,7 +448,7 @@ class TestQueryHistory:
 
     @pytest.mark.asyncio
     async def test_query_excludes_bot_messages(self, bot):
-        """query_history default scope excludes bot's own messages."""
+        """query_history bot_scope=exclude excludes bot's own messages."""
         from plugins.llm_tools import llm_tools_handler
 
         bot_qq = bot.config.bot.qq
@@ -460,7 +460,7 @@ class TestQueryHistory:
             {
                 "llm_type": "tool",
                 "tool_calls": [
-                    {"id": "qh7", "function": {"name": "query_history", "arguments": "{}"}}
+                    {"id": "qh7", "function": {"name": "query_history", "arguments": '{"bot_scope": "exclude"}'}}
                 ],
                 "response_buffer": response_buf,
                 "group_id": 123,
@@ -809,3 +809,162 @@ class TestQueryHistory:
         assert "找到以下消息" in text
         assert "Remote" in text
         assert "hello from remote" in text
+
+    @pytest.mark.asyncio
+    async def test_query_default_include_bot_messages(self, bot):
+        """query_history no-arg default (bot_scope=include) returns bot messages."""
+        from plugins.llm_tools import llm_tools_handler
+
+        bot_qq = bot.config.bot.qq
+        bot.msg_store.record_bot_message(1, 123, bot_qq, "Bot", "bot msg", 1000, True)
+        bot.msg_store.record_bot_message(2, 123, 100, "Alice", "user msg", 1001, True)
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qh_include", "function": {"name": "query_history", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "bot msg" in text
+        assert "user msg" in text
+
+    @pytest.mark.asyncio
+    async def test_query_default_limit_30(self, bot):
+        """query_history no-arg uses default limit=30 without exclude_user_ids."""
+        from plugins.llm_tools import llm_tools_handler
+        from unittest.mock import patch
+
+        response_buf: dict = {}
+        with patch.object(bot.msg_store, "query", wraps=bot.msg_store.query) as mock_query:
+            await llm_tools_handler(
+                {
+                    "llm_type": "tool",
+                    "tool_calls": [
+                        {"id": "qh_limit", "function": {"name": "query_history", "arguments": "{}"}}
+                    ],
+                    "response_buffer": response_buf,
+                    "group_id": 123,
+                    "user_id": 111,
+                },
+                bot,
+            )
+
+        call_kwargs = mock_query.call_args.kwargs
+        assert call_kwargs["n"] == 30
+        assert "exclude_user_ids" not in call_kwargs
+
+    @pytest.mark.asyncio
+    async def test_query_explicit_limit(self, bot):
+        """query_history with explicit limit is clamped at 50."""
+        from plugins.llm_tools import llm_tools_handler
+        from unittest.mock import patch
+
+        response_buf: dict = {}
+        with patch.object(bot.msg_store, "query", wraps=bot.msg_store.query) as mock_query:
+            await llm_tools_handler(
+                {
+                    "llm_type": "tool",
+                    "tool_calls": [
+                        {"id": "qh_lim", "function": {"name": "query_history", "arguments": '{"limit": 5}'}}
+                    ],
+                    "response_buffer": response_buf,
+                    "group_id": 123,
+                    "user_id": 111,
+                },
+                bot,
+            )
+
+        assert mock_query.call_args.kwargs["n"] == 5
+
+
+class TestToolHelp:
+    @pytest.mark.asyncio
+    async def test_help_all(self, bot):
+        """tool_help without args returns overview of all tools."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "h1", "function": {"name": "tool_help", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "可用工具一览" in text
+        assert "query_history" in text
+        assert "tool_help" in text
+        assert "set_essence" in text
+
+    @pytest.mark.asyncio
+    async def test_help_single(self, bot):
+        """tool_help with tool_name returns single tool details."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "h2", "function": {"name": "tool_help", "arguments": '{"tool_name": "query_history"}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "query_history" in text
+        assert "用例" in text
+        assert "keyword" in text
+
+    @pytest.mark.asyncio
+    async def test_help_unknown_tool(self, bot):
+        """tool_help with unknown tool_name returns error with suggestions."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "h3", "function": {"name": "tool_help", "arguments": '{"tool_name": "nonexistent"}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+
+        text = response_buf["results"][0]["result"]["text"]
+        assert "未找到工具" in text
+
+    @pytest.mark.asyncio
+    async def test_help_tool_def_complete(self):
+        """tool_help is in TOOL_DEFS with proper structure."""
+        from plugins.llm_tools import TOOL_DEFS
+
+        help_def = next(t for t in TOOL_DEFS if t["function"]["name"] == "tool_help")
+        assert help_def["type"] == "function"
+        fn = help_def["function"]
+        assert "tool_name" in fn["parameters"]["properties"]
+        assert fn["parameters"]["required"] == []

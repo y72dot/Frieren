@@ -21,8 +21,9 @@ def setup_logging(
         format=(
             "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
             "<level>{level: <8}</level> | "
+            "trace=<dim>{extra[trace_id]}</dim> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-            "<level>{message}</level> <dim>{extra}</dim>"
+            "<level>{message}</level>"
         ),
     )
 
@@ -36,5 +37,7 @@ def setup_logging(
         retention=retention,
         encoding="utf-8",
         enqueue=True,
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message} {extra}",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | trace={extra[trace_id]} | {name}:{function}:{line} | {message}",
     )
+
+    logger.configure(extra={"trace_id": ""})
