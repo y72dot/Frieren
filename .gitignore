@@ -34,3 +34,4 @@ instances/napcat-*/QQ/
 .claude/settings.local.json
 .bot.pid
 llms.txt
+qrcode.png

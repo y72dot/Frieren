@@ -75,12 +75,46 @@ class LoggingConfigSection:
 
 
 @dataclass
+class ActionQueueConfig:
+    """Per-plugin config for the action-queue rate limiter (:ref:`plugins.action_queue`)."""
+
+    enabled: bool = True
+    global_rate: float = 5.0  # max actions per second, 0 = unlimited
+    group_cooldown: float = 1.0  # seconds between actions to the same group, 0 = off
+    per_action_delay: float = 0.0  # extra fixed delay per action, 0 = off
+    spam_window: float = 5.0  # dedup window in seconds, 0 = disabled
+    spam_actions: list[str] = field(
+        default_factory=lambda: [
+            "send_group_msg",
+            "send_private_msg",
+            "send_group_poke",
+            "send_group_forward_msg",
+            "set_group_ban",
+            "set_group_kick",
+        ]
+    )
+    bypass_actions: list[str] = field(
+        default_factory=lambda: [
+            "get_group_info",
+            "get_group_member_info",
+            "get_group_member_list",
+            "get_login_info",
+            "get_friend_list",
+            "get_stranger_info",
+            "get_msg",
+        ]
+    )
+    block_actions: list[str] = field(default_factory=list)
+
+
+@dataclass
 class BotConfig:
     bot: BotConfigSection
     napcat: NapCatConfig
     plugin: PluginConfig
     logging: LoggingConfigSection
     filter: FilterConfig = field(default_factory=FilterConfig)
+    action_queue: ActionQueueConfig = field(default_factory=ActionQueueConfig)
     env: dict[str, str] = field(default_factory=dict)
 
 
@@ -193,6 +227,31 @@ def _parse_filter_section(data: dict[str, Any]) -> FilterConfig:
     )
 
 
+def _parse_action_queue_section(data: dict[str, Any]) -> ActionQueueConfig:
+    return ActionQueueConfig(
+        enabled=bool(data.get("enabled", True)),
+        global_rate=float(data.get("global_rate", 5.0)),
+        group_cooldown=float(data.get("group_cooldown", 1.0)),
+        per_action_delay=float(data.get("per_action_delay", 0.0)),
+        spam_window=float(data.get("spam_window", 5.0)),
+        spam_actions=list(
+            data.get(
+                "spam_actions",
+                [
+                    "send_group_msg",
+                    "send_private_msg",
+                    "send_group_poke",
+                    "send_group_forward_msg",
+                    "set_group_ban",
+                    "set_group_kick",
+                ],
+            )
+        ),
+        bypass_actions=list(data.get("bypass_actions", [])),
+        block_actions=list(data.get("block_actions", [])),
+    )
+
+
 def _parse_logging_section(data: dict[str, Any]) -> LoggingConfigSection:
     return LoggingConfigSection(
         level=str(data.get("level", "INFO")),
@@ -270,6 +329,9 @@ def load_config(
     plugin = _parse_plugin_section(raw.get("plugin", {}))
     logging = _parse_logging_section(raw.get("logging", {}))
     filter_cfg = _parse_filter_section(raw.get("filter", {}))
+    action_queue = _parse_action_queue_section(
+        raw.get("plugin", {}).get("action_queue", {})
+    )
 
     env_path = env_file if env_file else str(project_root / ".env")
     env = _load_env(Path(env_path).parent) if env_file else _load_env(project_root)
@@ -280,5 +342,6 @@ def load_config(
         plugin=plugin,
         logging=logging,
         filter=filter_cfg,
+        action_queue=action_queue,
         env=env,
     )

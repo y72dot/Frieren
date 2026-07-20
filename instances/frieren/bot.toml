@@ -85,6 +85,14 @@ list = [511328292]
 [filter.plugins.essence.private]
 mode = "off"
 
+[plugin.action_queue]
+enabled = true
+global_rate = 5
+group_cooldown = 1.0
+per_action_delay = 0.1
+spam_window = 5.0
+spam_actions = ["send_group_msg", "send_private_msg", "send_group_poke", "send_group_forward_msg", "set_group_ban", "set_group_kick"]
+
 [logging]
 level = "INFO"
 file = "logs/bot.log"
