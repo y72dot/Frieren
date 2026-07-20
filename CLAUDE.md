@@ -9,10 +9,12 @@ tip：用 Bash 工具 + curl 来抓取网页内容，不用 WebFetch。llms.txt 
 ```
 NapCatQQ WebSocket → Bot._process_events (async for raw_event)
   → EventBus.parse (raw → Event) → bot.msg_store.record(event)
+    → FilterManager.check (全局+插件级过滤) → 不通过则丢弃
     → MessageBus.dispatch (EXTERNAL, 按 priority 升序遍历插件)
       → Plugin.match → Plugin.handle → return True/False (suppressible)
-    → MessageBus.flush (排空 ACTION 队列)
-      → _QQExec → ApiClient._raw_call → 实际 HTTP/WS 调用
+  → 插件调用 bot.api.xxx() → MessageBus.dispatch (ACTION)
+    → action_queue (p=1): block → bypass → spam → rate-limit
+    → _QQExec (p=100) → ApiClient._raw_call → 实际 HTTP/WS 调用
 ```
 
 No NoneBot / AstrBot / Koishi — core is self-written.
@@ -23,10 +25,11 @@ No NoneBot / AstrBot / Koishi — core is self-written.
 | ----------------- | ------------------------------------------------------------ |
 | `MessageBus`    | 中央总线，所有插件订阅和 API 调用都经过它                    |
 | `FilterManager` | 统一过滤（全局 + 插件级），挂载于 `bot.filter_mgr`，dispatch 前拦截 |
-| `EventBus`      | 原始 napcat 事件 → 内部`Event`；记录历史；触发总线 dispatch + flush |
+| `EventBus`      | 原始 napcat 事件 → 内部`Event`；记录历史；触发总线 dispatch |
 | `MessageStore`  | SQLite 持久化消息历史，插件可通过 `bot.msg_store` 同步查询   |
-| `PluginManager` | 扫描/导入/注册插件到总线 EXTERNAL 队列                       |
+| `PluginManager` | 扫描/导入/注册插件到总线 EXTERNAL 队列；`@subscribe` 适配器  |
 | `ApiClient`     | API 调用包装成 ACTION 消息入队，由`_QQExec` 最终执行       |
+| `action_queue`  | p=1 拦截所有 ACTION，四层过滤：block → bypass → spam(去重) → rate-limit |
 
 ### Message Types & Dispatch Semantics
 
@@ -38,6 +41,10 @@ No NoneBot / AstrBot / Koishi — core is self-written.
 | `LIFECYCLE` | 生命周期事件  | 否           | 同上                                                       |
 
 `BusMessage.depth` 上限 10，防无限递归。
+
+### `@subscribe` Direct Handler
+
+`@subscribe(MessageType, priority=N)` 注册的函数签名是 `(payload: object, bot: Bot) -> bool`，`_SubscribeAdapter` 会解包 `msg.payload` 传入，**不是** `BusMessage`。用于非插件式处理器（如 action_queue 拦截 ACTION）。
 
 ### Plugin Return Value Convention
 
