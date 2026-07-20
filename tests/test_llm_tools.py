@@ -23,7 +23,7 @@ class TestToolDefs:
     def test_tool_count(self):
         from plugins.llm_tools import TOOL_DEFS
 
-        assert len(TOOL_DEFS) == 10
+        assert len(TOOL_DEFS) == 24
 
     def test_all_tool_names_unique(self):
         from plugins.llm_tools import TOOL_DEFS
@@ -976,3 +976,974 @@ class TestToolHelp:
         fn = help_def["function"]
         assert "tool_name" in fn["parameters"]["properties"]
         assert fn["parameters"]["required"] == []
+
+    @pytest.mark.asyncio
+    async def test_help_all_includes_new_tools(self, bot):
+        """tool_help --all lists new tools from four directions."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "hall", "function": {"name": "tool_help", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        text = response_buf["results"][0]["result"]["text"]
+        # 方向一
+        assert "get_group_info" in text
+        assert "get_member_list" in text
+        assert "get_essence_list" in text
+        assert "get_shut_list" in text
+        # 方向二
+        assert "set_group_card" in text
+        assert "delete_msg" in text
+        assert "whole_ban" in text
+        assert "set_admin" in text
+        # 方向三
+        assert "send_poke" in text
+        assert "send_like" in text
+        assert "ocr_image" in text
+        assert "voice_to_text" in text
+        # 方向四
+        assert "think" in text
+
+    @pytest.mark.asyncio
+    async def test_help_single_new_tool(self, bot):
+        """tool_help with a new tool name shows its details."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "hs1", "function": {"name": "tool_help", "arguments": '{"tool_name": "get_member_info"}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        text = response_buf["results"][0]["result"]["text"]
+        assert "get_member_info" in text
+        assert "user_id" in text
+        assert "用例" in text
+
+    @pytest.mark.asyncio
+    async def test_help_total_count(self, bot):
+        """tool_help --all shows correct total tool count."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "hcnt", "function": {"name": "tool_help", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        text = response_buf["results"][0]["result"]["text"]
+        assert "共 24 个工具" in text
+
+
+# ====================================================================
+# 方向一: 信息获取工具
+# ====================================================================
+
+
+class TestGetGroupInfo:
+    @pytest.mark.asyncio
+    async def test_basic(self, bot):
+        """get_group_info returns key group fields."""
+        from plugins.llm_tools import llm_tools_handler
+
+        async def fake_get_group_info(group_id):
+            bot.api.calls.append({"method": "get_group_info", "group_id": group_id})
+            return {
+                "data": {
+                    "group_name": "Test Group",
+                    "group_id": 123,
+                    "member_count": 50,
+                    "max_member_count": 200,
+                    "owner_id": 100,
+                    "group_memo": "welcome",
+                }
+            }
+
+        bot.api.get_group_info = fake_get_group_info
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "g1", "function": {"name": "get_group_info", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        result = response_buf["results"][0]["result"]
+        assert "Test Group" in result["text"]
+        assert "50" in result["text"]
+        assert "welcome" in result["text"]
+
+    @pytest.mark.asyncio
+    async def test_empty_data(self, bot):
+        """get_group_info with empty response returns raw data as JSON."""
+        from plugins.llm_tools import llm_tools_handler
+
+        async def fake_get_group_info(group_id):
+            bot.api.calls.append({"method": "get_group_info", "group_id": group_id})
+            return {}
+
+        bot.api.get_group_info = fake_get_group_info
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "g2", "function": {"name": "get_group_info", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        assert "text" in response_buf["results"][0]["result"]
+
+
+class TestGetMemberInfo:
+    @pytest.mark.asyncio
+    async def test_basic(self, bot):
+        """get_member_info returns identity fields for a member."""
+        from plugins.llm_tools import llm_tools_handler
+
+        async def fake_get_member_info(group_id, user_id):
+            bot.api.calls.append(
+                {"method": "get_group_member_info", "group_id": group_id, "user_id": user_id}
+            )
+            return {
+                "data": {
+                    "user_id": 555,
+                    "nickname": "Alice",
+                    "card": "A酱",
+                    "role": "admin",
+                    "title": "专属头衔",
+                }
+            }
+
+        bot.api.get_group_member_info = fake_get_member_info
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "m1", "function": {"name": "get_member_info", "arguments": '{"user_id": 555}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        result = response_buf["results"][0]["result"]
+        assert "Alice" in result["text"]
+        assert "admin" in result["text"]
+        assert "A酱" in result["text"]
+
+    @pytest.mark.asyncio
+    async def test_empty_data(self, bot):
+        """get_member_info with empty response still returns valid JSON."""
+        from plugins.llm_tools import llm_tools_handler
+
+        async def fake_get_member_info(group_id, user_id):
+            bot.api.calls.append(
+                {"method": "get_group_member_info", "group_id": group_id, "user_id": user_id}
+            )
+            return {}
+
+        bot.api.get_group_member_info = fake_get_member_info
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "m2", "function": {"name": "get_member_info", "arguments": '{"user_id": 555}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        assert "text" in response_buf["results"][0]["result"]
+
+
+class TestGetMemberList:
+    @pytest.mark.asyncio
+    async def test_list_format(self, bot):
+        """get_member_list returns formatted member list with role tags."""
+        from plugins.llm_tools import llm_tools_handler
+
+        async def fake_get_member_list(group_id):
+            bot.api.calls.append({"method": "get_group_member_list", "group_id": group_id})
+            return {
+                "data": [
+                    {"user_id": 100, "nickname": "Owner", "card": "", "role": "owner"},
+                    {"user_id": 200, "nickname": "Admin", "card": "管理员", "role": "admin"},
+                    {"user_id": 300, "nickname": "Member", "card": "", "role": "member"},
+                ]
+            }
+
+        bot.api.get_group_member_list = fake_get_member_list
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "ml1", "function": {"name": "get_member_list", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        text = response_buf["results"][0]["result"]["text"]
+        assert "群成员共 3 人" in text
+        assert "Owner" in text
+        assert "[群主]" in text
+        assert "[管理员]" in text
+        assert "群名片:管理员" in text
+
+    @pytest.mark.asyncio
+    async def test_empty(self, bot):
+        """get_member_list with empty data shows 0 members."""
+        from plugins.llm_tools import llm_tools_handler
+
+        async def fake_get_member_list(group_id):
+            bot.api.calls.append({"method": "get_group_member_list", "group_id": group_id})
+            return {"data": []}
+
+        bot.api.get_group_member_list = fake_get_member_list
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "ml2", "function": {"name": "get_member_list", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        text = response_buf["results"][0]["result"]["text"]
+        assert "群成员共 0 人" in text
+
+    @pytest.mark.asyncio
+    async def test_dict_with_members_key(self, bot):
+        """get_member_list handles response with members key."""
+        from plugins.llm_tools import llm_tools_handler
+
+        async def fake_get_member_list(group_id):
+            bot.api.calls.append({"method": "get_group_member_list", "group_id": group_id})
+            return {"data": {"members": [{"user_id": 100, "nickname": "Test", "card": "", "role": "member"}]}}
+
+        bot.api.get_group_member_list = fake_get_member_list
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "ml3", "function": {"name": "get_member_list", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        text = response_buf["results"][0]["result"]["text"]
+        assert "Test" in text
+
+    @pytest.mark.asyncio
+    async def test_truncation_100(self, bot):
+        """get_member_list truncates at 100 members."""
+        from plugins.llm_tools import llm_tools_handler
+
+        members = [
+            {"user_id": i, "nickname": f"User{i}", "card": "", "role": "member"}
+            for i in range(150)
+        ]
+
+        async def fake_get_member_list(group_id):
+            bot.api.calls.append({"method": "get_group_member_list", "group_id": group_id})
+            return {"data": members}
+
+        bot.api.get_group_member_list = fake_get_member_list
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "ml4", "function": {"name": "get_member_list", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        text = response_buf["results"][0]["result"]["text"]
+        assert "共 150 人" in text
+        assert "仅显示前100人" in text
+        # Verify only 100 lines (not all 150 user IDs)
+        assert "User0" in text
+        assert "User99" in text
+        assert "User100" not in text
+
+
+class TestGetEssenceList:
+    @pytest.mark.asyncio
+    async def test_with_data(self, bot):
+        """get_essence_list returns formatted essence messages."""
+        from plugins.llm_tools import llm_tools_handler
+
+        async def fake_call_action(action, **params):
+            bot.api.calls.append({"method": "call_action", "action": action, "params": params})
+            if action == "get_essence_msg_list":
+                return {
+                    "data": [
+                        {
+                            "message_id": 1,
+                            "sender_nick": "Alice",
+                            "content": "hello world",
+                            "time": 1000,
+                        },
+                        {
+                            "message_id": 2,
+                            "sender_nick": "Bob",
+                            "content": "nice",
+                            "time": 2000,
+                        },
+                    ]
+                }
+            return {}
+
+        bot.api.call_action = fake_call_action
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "e1", "function": {"name": "get_essence_list", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        text = response_buf["results"][0]["result"]["text"]
+        assert "精华消息共 2 条" in text
+        assert "Alice" in text
+        assert "hello world" in text
+        assert "Bob" in text
+
+    @pytest.mark.asyncio
+    async def test_empty(self, bot):
+        """get_essence_list with empty data returns提示."""
+        from plugins.llm_tools import llm_tools_handler
+
+        async def fake_call_action(action, **params):
+            bot.api.calls.append({"method": "call_action", "action": action, "params": params})
+            return {"data": []}
+
+        bot.api.call_action = fake_call_action
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "e2", "function": {"name": "get_essence_list", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        text = response_buf["results"][0]["result"]["text"]
+        assert "暂无精华消息" in text
+
+    @pytest.mark.asyncio
+    async def test_truncation_20(self, bot):
+        """get_essence_list truncates at 20 entries."""
+        from plugins.llm_tools import llm_tools_handler
+
+        essences = [
+            {"message_id": i, "sender_nick": f"User{i}", "content": f"msg{i}"}
+            for i in range(25)
+        ]
+
+        async def fake_call_action(action, **params):
+            bot.api.calls.append({"method": "call_action", "action": action, "params": params})
+            return {"data": essences}
+
+        bot.api.call_action = fake_call_action
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "e3", "function": {"name": "get_essence_list", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        text = response_buf["results"][0]["result"]["text"]
+        assert "共 25 条" in text
+        assert "仅展示前20条" in text
+        assert "msg0" in text
+        assert "msg19" in text
+        assert "msg20" not in text
+
+    @pytest.mark.asyncio
+    async def test_dict_list_content(self, bot):
+        """get_essence_list handles list-type message content."""
+        from plugins.llm_tools import llm_tools_handler
+
+        async def fake_call_action(action, **params):
+            bot.api.calls.append({"method": "call_action", "action": action, "params": params})
+            return {
+                "data": [
+                    {
+                        "message_id": 1,
+                        "sender_nick": "Alice",
+                        "content": [
+                            {"type": "text", "data": {"text": "hello"}},
+                            {"type": "image", "data": {}},
+                            {"type": "text", "data": {"text": " world"}},
+                        ],
+                    }
+                ]
+            }
+
+        bot.api.call_action = fake_call_action
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "e4", "function": {"name": "get_essence_list", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        text = response_buf["results"][0]["result"]["text"]
+        assert "hello" in text
+        assert "world" in text
+
+
+class TestGetShutList:
+    @pytest.mark.asyncio
+    async def test_with_data(self, bot):
+        """get_shut_list returns formatted shut-up list."""
+        from plugins.llm_tools import llm_tools_handler
+
+        async def fake_call_action(action, **params):
+            bot.api.calls.append({"method": "call_action", "action": action, "params": params})
+            if action == "get_group_shut_list":
+                return {
+                    "data": [
+                        {"user_id": 555, "nickname": "BadUser", "duration": 300},
+                        {"user_id": 666, "nickname": "Spammer", "duration": 600},
+                    ]
+                }
+            return {}
+
+        bot.api.call_action = fake_call_action
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "s1", "function": {"name": "get_shut_list", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        text = response_buf["results"][0]["result"]["text"]
+        assert "禁言列表共 2 人" in text
+        assert "BadUser" in text
+        assert "剩余 300 秒" in text
+        assert "Spammer" in text
+
+    @pytest.mark.asyncio
+    async def test_empty(self, bot):
+        """get_shut_list with empty data returns提示."""
+        from plugins.llm_tools import llm_tools_handler
+
+        async def fake_call_action(action, **params):
+            bot.api.calls.append({"method": "call_action", "action": action, "params": params})
+            return {"data": []}
+
+        bot.api.call_action = fake_call_action
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "s2", "function": {"name": "get_shut_list", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        text = response_buf["results"][0]["result"]["text"]
+        assert "没有成员被禁言" in text
+
+
+# ====================================================================
+# 方向二: 群管理工具
+# ====================================================================
+
+
+class TestSetGroupCard:
+    @pytest.mark.asyncio
+    async def test_basic(self, bot):
+        """set_group_card calls call_action with correct params."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "sc1", "function": {"name": "set_group_card", "arguments": '{"user_id": 555, "card": "新名片"}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        # Verify call_action was invoked
+        call_action_calls = [
+            c for c in bot.api.calls if c.get("method") == "call_action"
+        ]
+        assert len(call_action_calls) == 1
+        assert call_action_calls[0]["action"] == "set_group_card"
+        assert call_action_calls[0]["params"]["group_id"] == 123
+        assert call_action_calls[0]["params"]["user_id"] == 555
+        assert call_action_calls[0]["params"]["card"] == "新名片"
+
+    @pytest.mark.asyncio
+    async def test_empty_card(self, bot):
+        """set_group_card with empty card string clears the card."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "sc2", "function": {"name": "set_group_card", "arguments": '{"user_id": 555, "card": ""}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "call_action"]
+        assert calls[0]["params"]["card"] == ""
+
+
+class TestDeleteMsg:
+    @pytest.mark.asyncio
+    async def test_basic(self, bot):
+        """delete_msg calls call_action with delete_msg action."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "d1", "function": {"name": "delete_msg", "arguments": '{"message_id": 12345}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "call_action"]
+        assert len(calls) == 1
+        assert calls[0]["action"] == "delete_msg"
+        assert calls[0]["params"]["message_id"] == 12345
+
+
+class TestWholeBan:
+    @pytest.mark.asyncio
+    async def test_enable(self, bot):
+        """whole_ban enable=true calls set_group_whole_ban."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "wb1", "function": {"name": "whole_ban", "arguments": '{"enable": true}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "call_action"]
+        assert len(calls) == 1
+        assert calls[0]["action"] == "set_group_whole_ban"
+        assert calls[0]["params"]["enable"] is True
+
+    @pytest.mark.asyncio
+    async def test_disable(self, bot):
+        """whole_ban enable=false calls set_group_whole_ban with enable=False."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "wb2", "function": {"name": "whole_ban", "arguments": '{"enable": false}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "call_action"]
+        assert calls[0]["params"]["enable"] is False
+
+    @pytest.mark.asyncio
+    async def test_default_enable(self, bot):
+        """whole_ban without enable defaults to True."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "wb3", "function": {"name": "whole_ban", "arguments": "{}"}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "call_action"]
+        assert calls[0]["params"]["enable"] is True
+
+
+class TestSetAdmin:
+    @pytest.mark.asyncio
+    async def test_set_admin(self, bot):
+        """set_admin enable=true calls set_group_admin."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "sa1", "function": {"name": "set_admin", "arguments": '{"user_id": 555, "enable": true}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "call_action"]
+        assert len(calls) == 1
+        assert calls[0]["action"] == "set_group_admin"
+        assert calls[0]["params"]["user_id"] == 555
+        assert calls[0]["params"]["enable"] is True
+
+    @pytest.mark.asyncio
+    async def test_unset_admin(self, bot):
+        """set_admin enable=false unsets admin."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "sa2", "function": {"name": "set_admin", "arguments": '{"user_id": 555, "enable": false}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "call_action"]
+        assert calls[0]["params"]["enable"] is False
+
+    @pytest.mark.asyncio
+    async def test_default_enable(self, bot):
+        """set_admin without enable defaults to True."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "sa3", "function": {"name": "set_admin", "arguments": '{"user_id": 555}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "call_action"]
+        assert calls[0]["params"]["enable"] is True
+
+
+# ====================================================================
+# 方向三: 互动与内容感知
+# ====================================================================
+
+
+class TestSendPoke:
+    @pytest.mark.asyncio
+    async def test_basic(self, bot):
+        """send_poke calls bot.api.send_group_poke."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "p1", "function": {"name": "send_poke", "arguments": '{"user_id": 555}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "send_group_poke"]
+        assert len(calls) == 1
+        assert calls[0]["group_id"] == 123
+        assert calls[0]["user_id"] == 555
+
+
+class TestSendLike:
+    @pytest.mark.asyncio
+    async def test_basic(self, bot):
+        """send_like with explicit times calls call_action."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "l1", "function": {"name": "send_like", "arguments": '{"user_id": 999, "times": 5}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "call_action"]
+        assert len(calls) == 1
+        assert calls[0]["action"] == "send_like"
+        assert calls[0]["params"]["user_id"] == 999
+        assert calls[0]["params"]["times"] == 5
+
+    @pytest.mark.asyncio
+    async def test_default_times(self, bot):
+        """send_like without times defaults to 1."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "l2", "function": {"name": "send_like", "arguments": '{"user_id": 999}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "call_action"]
+        assert calls[0]["params"]["times"] == 1
+
+    @pytest.mark.asyncio
+    async def test_private_context(self, bot):
+        """send_like works in private chat context (no group_id)."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "l3", "function": {"name": "send_like", "arguments": '{"user_id": 999}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": None,
+                "user_id": 999,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "call_action"]
+        assert len(calls) == 1
+        assert calls[0]["params"]["user_id"] == 999
+
+
+class TestOcrImage:
+    @pytest.mark.asyncio
+    async def test_basic(self, bot):
+        """ocr_image calls call_action with ocr_image action."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "o1", "function": {"name": "ocr_image", "arguments": '{"image": "http://example.com/img.png"}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "call_action"]
+        assert len(calls) == 1
+        assert calls[0]["action"] == "ocr_image"
+        assert calls[0]["params"]["image"] == "http://example.com/img.png"
+
+
+class TestVoiceToText:
+    @pytest.mark.asyncio
+    async def test_basic(self, bot):
+        """voice_to_text calls call_action with fetch_ptt_text action."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "v1", "function": {"name": "voice_to_text", "arguments": '{"message_id": 12345}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        calls = [c for c in bot.api.calls if c.get("method") == "call_action"]
+        assert len(calls) == 1
+        assert calls[0]["action"] == "fetch_ptt_text"
+        assert calls[0]["params"]["message_id"] == 12345
+
+
+# ====================================================================
+# 方向四: Agent 认知增强
+# ====================================================================
+
+
+class TestThink:
+    @pytest.mark.asyncio
+    async def test_basic(self, bot):
+        """think tool returns acknowledged=True."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "t1", "function": {"name": "think", "arguments": '{"reasoning": "我需要分析谁在发广告。步骤1: 查询最近消息。步骤2: 找出违规者。步骤3: 禁言。"}'}}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        result = response_buf["results"][0]["result"]
+        assert result["acknowledged"] is True
+
+    @pytest.mark.asyncio
+    async def test_multiple_think_calls(self, bot):
+        """Multiple think calls in one dispatch are all executed."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "t2a", "function": {"name": "think", "arguments": '{"reasoning": "第一步"}'}},
+                    {"id": "t2b", "function": {"name": "think", "arguments": '{"reasoning": "第二步"}'}},
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        assert len(response_buf["results"]) == 2
+        assert response_buf["results"][0]["result"]["acknowledged"] is True
+        assert response_buf["results"][1]["result"]["acknowledged"] is True

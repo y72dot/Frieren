@@ -67,6 +67,8 @@ class _FakeApiClient:
         self._bus = bus
         self._fail_on: str | None = None
         self._raise_error: Exception | None = None
+        self._responses: dict[str, Any] = {}
+        self._last_raw_call: dict | None = None
 
     # lifecycle
     def set_client(self, client: Any) -> None:
@@ -79,11 +81,21 @@ class _FakeApiClient:
 
     async def _raw_call(self, action: str, **params: Any) -> dict[str, Any]:
         """Direct call bypassing the bus (used by _qq_exec)."""
+        self._last_raw_call = {"action": action, **params}
         self.calls.append({"method": action, **params})
         if action in ("send_group_msg", "send_private_msg"):
             self._msg_id_counter += 1
             return {"message_id": self._msg_id_counter}
-        return {"status": "ok"}
+        return self._responses.get(action, {"status": "ok"})
+
+    def set_response(self, action: str, response: dict) -> None:
+        """Configure a canned response for a specific action."""
+        self._responses[action] = response
+
+    async def get_forward_msg(self, forward_id: str) -> dict[str, Any]:
+        """Retrieve merged-forward message content."""
+        self.calls.append({"method": "get_forward_msg", "forward_id": forward_id})
+        return self._responses.get("get_forward_msg", {"data": {"messages": []}})
 
     async def send_group_msg(self, group_id: int, message: str) -> dict[str, Any]:
         if self._bus is not None:
@@ -131,7 +143,7 @@ class _FakeApiClient:
 
     async def get_group_info(self, group_id: int) -> dict[str, Any]:
         self.calls.append({"method": "get_group_info", "group_id": group_id})
-        return {}
+        return self._responses.get("get_group_info", {})
 
     async def get_group_member_info(
         self, group_id: int, user_id: int
@@ -143,11 +155,11 @@ class _FakeApiClient:
                 "user_id": user_id,
             }
         )
-        return {}
+        return self._responses.get("get_group_member_info", {})
 
     async def get_group_member_list(self, group_id: int) -> dict[str, Any]:
         self.calls.append({"method": "get_group_member_list", "group_id": group_id})
-        return {}
+        return self._responses.get("get_group_member_list", {})
 
     async def set_group_ban(
         self, group_id: int, user_id: int, duration: int
@@ -196,7 +208,7 @@ class _FakeApiClient:
 
     async def get_msg(self, message_id: int) -> dict[str, Any]:
         self.calls.append({"method": "get_msg", "message_id": message_id})
-        return {}
+        return self._responses.get("get_msg", {})
 
     async def set_essence_msg(self, message_id: int) -> dict[str, Any]:
         self.calls.append({"method": "set_essence_msg", "message_id": message_id})

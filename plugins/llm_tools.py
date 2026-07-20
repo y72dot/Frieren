@@ -162,7 +162,7 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "tool_help",
-            "description": "获取所有可用工具的参数说明和使用示例。不确定某个工具怎么用或参数含义时调用此工具。",
+            "description": "获取所有可用工具的参数说明和使用示例。不确定某个工具怎么用或参数含义时调用此工具。也可用 tool_name=\"chain_guide\" 查看工具链式调用指南，用 tool_name=\"decision_guide\" 查看常见任务的工具组合建议。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -189,6 +189,224 @@ TOOL_DEFS: list[dict[str, Any]] = [
                     }
                 },
                 "required": ["forward_id"],
+            },
+        },
+    },
+    # ── 方向一: 信息获取工具 ──
+    {
+        "type": "function",
+        "function": {
+            "name": "get_group_info",
+            "description": "获取群聊详细信息：群名、人数、创建时间等。用于了解群组基本情况。",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_member_info",
+            "description": "查询群成员的群名片、QQ号、角色(owner/admin/member)。需要了解某人身份时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "integer",
+                        "description": "要查询的用户QQ号",
+                    }
+                },
+                "required": ["user_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_member_list",
+            "description": "获取群成员完整列表，了解群内有哪些人、谁在活跃。结果可能较大，会返回摘要。",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_essence_list",
+            "description": "获取群精华消息列表，了解群里哪些消息被标记为精华。",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_shut_list",
+            "description": "获取当前群禁言列表，查看哪些成员被禁言及剩余时长。",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    # ── 方向二: 群管理工具 ──
+    {
+        "type": "function",
+        "function": {
+            "name": "set_group_card",
+            "description": "修改群成员的群名片。需要修改某人的群昵称时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "integer",
+                        "description": "要修改的用户QQ号",
+                    },
+                    "card": {
+                        "type": "string",
+                        "description": "新的群名片内容，空字符串表示清除群名片",
+                    },
+                },
+                "required": ["user_id", "card"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_msg",
+            "description": "撤回一条消息。注意：只能撤回bot自己发送的消息或bot是管理员时撤回他人消息。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message_id": {
+                        "type": "integer",
+                        "description": "要撤回的消息ID",
+                    }
+                },
+                "required": ["message_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "whole_ban",
+            "description": "开启或关闭全员禁言。需要bot是群主。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "enable": {
+                        "type": "boolean",
+                        "description": "true=开启全员禁言，false=关闭",
+                    }
+                },
+                "required": ["enable"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_admin",
+            "description": "设置或取消群管理员。需要bot是群主。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "integer",
+                        "description": "要设置的用户QQ号",
+                    },
+                    "enable": {
+                        "type": "boolean",
+                        "description": "true=设为管理员，false=取消管理员",
+                    },
+                },
+                "required": ["user_id", "enable"],
+            },
+        },
+    },
+    # ── 方向三: 互动与内容感知 ──
+    {
+        "type": "function",
+        "function": {
+            "name": "send_poke",
+            "description": "戳一戳群成员，用于轻量互动或吸引注意。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "integer",
+                        "description": "要戳的用户QQ号",
+                    }
+                },
+                "required": ["user_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_like",
+            "description": "给用户点赞（私聊场景为主）。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "integer",
+                        "description": "要对其点赞的用户QQ号",
+                    },
+                    "times": {
+                        "type": "integer",
+                        "description": "点赞次数，默认1，建议不超过10",
+                    },
+                },
+                "required": ["user_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ocr_image",
+            "description": "OCR识别图片中的文字。当用户发送图片并要求识别或询问图片内容时调用。注：仅Windows端NapCat支持。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "image": {
+                        "type": "string",
+                        "description": "图片路径、URL或Base64编码的图片数据",
+                    }
+                },
+                "required": ["image"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "voice_to_text",
+            "description": "将语音消息转为文字。当用户发送语音需要了解说了什么时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message_id": {
+                        "type": "integer",
+                        "description": "语音消息的消息ID",
+                    }
+                },
+                "required": ["message_id"],
+            },
+        },
+    },
+    # ── 方向四: Agent 认知增强 ──
+    {
+        "type": "function",
+        "function": {
+            "name": "think",
+            "description": "在执行复杂操作前梳理思路。常用于需要多步推理的场景：分析问题→收集信息→决策→执行。详细的工具链式调用指南请见 tool_help(tool_name=\"chain_guide\")。思考内容仅自己可见。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "reasoning": {
+                        "type": "string",
+                        "description": "思考过程，包括分析步骤、需要哪些信息、预期结果",
+                    }
+                },
+                "required": ["reasoning"],
             },
         },
     },
@@ -421,6 +639,124 @@ async def _execute(
     if name == "resolve_forward":
         result_text = await _resolve_forward(str(args["forward_id"]), bot)
         return {"text": result_text}
+    # ── 方向一: 信息获取工具 ──
+    if name == "get_group_info":
+        result = await bot.api.get_group_info(group_id)
+        data = result.get("data", result)
+        # Extract key fields for compact output
+        info_fields = {}
+        for k in ("group_name", "group_id", "member_count", "max_member_count", "create_time", "group_level", "owner_id", "admin_count", "group_memo"):
+            if k in data:
+                info_fields[k] = data[k]
+        if not info_fields:
+            info_fields = data
+        return {"text": json.dumps(info_fields, ensure_ascii=False, indent=2)}
+    if name == "get_member_info":
+        result = await bot.api.get_group_member_info(group_id, args["user_id"])
+        data = result.get("data", result)
+        # Keep key identity fields
+        fields = {}
+        for k in ("user_id", "nickname", "card", "role", "title", "join_time", "last_speak_time", "level"):
+            if k in data:
+                fields[k] = data[k]
+        if not fields:
+            fields = data
+        return {"text": json.dumps(fields, ensure_ascii=False, indent=2)}
+    if name == "get_member_list":
+        result = await bot.api.get_group_member_list(group_id)
+        data = result.get("data", result)
+        members = data if isinstance(data, list) else data.get("members", [])
+        total = len(members)
+        # Role labels
+        role_labels = {"owner": "[群主]", "admin": "[管理员]", "member": ""}
+        lines: list[str] = []
+        for m in members[:100]:
+            uid = m.get("user_id", 0)
+            nickname = m.get("nickname", "") or ""
+            card = m.get("card", "") or ""
+            role = m.get("role", "member")
+            role_tag = role_labels.get(role, f"[{role}]")
+            display = f"{nickname}({uid})"
+            if card and card != nickname:
+                display += f" 群名片:{card}"
+            if role_tag:
+                display += f" {role_tag}"
+            lines.append(display)
+        header = f"群成员共 {total} 人："
+        text = header + "\n" + "\n".join(lines)
+        if total > 100:
+            text += f"\n...（仅显示前100人，共{total}人）"
+        return {"text": text}
+    if name == "get_essence_list":
+        raw = await bot.api.call_action("get_essence_msg_list", group_id=group_id)
+        data = raw.get("data", raw)
+        essences = data if isinstance(data, list) else data.get("essences", data.get("messages", []))
+        if not essences:
+            return {"text": "暂无精华消息。"}
+        # Show up to 20
+        lines = [f"精华消息共 {len(essences)} 条："]
+        for e in essences[:20]:
+            sender = e.get("sender_nick", "") or e.get("sender", {}).get("nickname", "")
+            content = e.get("content", "") or str(e.get("message", "")) or ""
+            msg_id = e.get("message_id", "")
+            ts = e.get("time", "")
+            if isinstance(content, list):
+                parts = []
+                for seg in content:
+                    if isinstance(seg, dict) and seg.get("type") == "text":
+                        parts.append(seg.get("data", {}).get("text", ""))
+                content = "".join(parts)
+            content = str(content)[:80]
+            lines.append(f"- [{msg_id}] {sender}: {content}" + (f" ({ts})" if ts else ""))
+        if len(essences) > 20:
+            lines.append(f"...（仅展示前20条）")
+        return {"text": "\n".join(lines)}
+    if name == "get_shut_list":
+        raw = await bot.api.call_action("get_group_shut_list", group_id=group_id)
+        data = raw.get("data", raw)
+        shut_members = data if isinstance(data, list) else data.get("shut_list", data.get("members", []))
+        if not shut_members:
+            return {"text": "当前没有成员被禁言。"}
+        lines = [f"禁言列表共 {len(shut_members)} 人："]
+        for m in shut_members[:50]:
+            uid = m.get("user_id", 0)
+            nickname = m.get("nickname", "") or str(uid)
+            duration = m.get("duration", m.get("ban_time", 0))
+            lines.append(f"- {nickname}({uid}) 剩余 {duration} 秒")
+        return {"text": "\n".join(lines)}
+    # ── 方向二: 群管理工具 ──
+    if name == "set_group_card":
+        return await bot.api.call_action(
+            "set_group_card", group_id=group_id,
+            user_id=args["user_id"], card=args["card"],
+        )
+    if name == "delete_msg":
+        return await bot.api.call_action("delete_msg", message_id=args["message_id"])
+    if name == "whole_ban":
+        enable = args.get("enable", True)
+        return await bot.api.call_action(
+            "set_group_whole_ban", group_id=group_id, enable=enable,
+        )
+    if name == "set_admin":
+        return await bot.api.call_action(
+            "set_group_admin", group_id=group_id,
+            user_id=args["user_id"], enable=args.get("enable", True),
+        )
+    # ── 方向三: 互动与内容感知 ──
+    if name == "send_poke":
+        return await bot.api.send_group_poke(group_id, args["user_id"])
+    if name == "send_like":
+        return await bot.api.call_action(
+            "send_like", user_id=args["user_id"], times=args.get("times", 1),
+        )
+    if name == "ocr_image":
+        return await bot.api.call_action("ocr_image", image=args["image"])
+    if name == "voice_to_text":
+        return await bot.api.call_action("fetch_ptt_text", message_id=args["message_id"])
+    # ── 方向四: Agent 认知增强 ──
+    if name == "think":
+        logger.info(f"THINK tool: {args.get('reasoning', '')}")
+        return {"acknowledged": True}
     return {"error": f"unknown tool: {name}"}
 
 
@@ -506,21 +842,158 @@ _HELP_TEXTS = {
         ],
         "example": "resolve_forward(forward_id=\"abc123\") — 解析该转发消息的具体对话内容",
     },
+    # ── 方向一: 信息获取工具 ──
+    "get_group_info": {
+        "desc": "获取群聊详细信息（群名、人数、创建时间等）",
+        "params": [],
+        "example": "get_group_info() — 返回当前群的基本信息",
+    },
+    "get_member_info": {
+        "desc": "查询群成员的群名片、QQ、角色",
+        "params": [
+            ("user_id", "integer", "是", "要查询的用户QQ号"),
+        ],
+        "example": "get_member_info(user_id=123456) — 查询该用户的群身份信息",
+    },
+    "get_member_list": {
+        "desc": "获取群成员完整列表（返回摘要，最多显示前100人）",
+        "params": [],
+        "example": "get_member_list() — 列出群成员概况",
+    },
+    "get_essence_list": {
+        "desc": "获取群精华消息列表",
+        "params": [],
+        "example": "get_essence_list() — 查看群里的精华消息",
+    },
+    "get_shut_list": {
+        "desc": "获取当前被禁言的成员列表",
+        "params": [],
+        "example": "get_shut_list() — 查看谁被禁言了",
+    },
+    # ── 方向二: 群管理工具 ──
+    "set_group_card": {
+        "desc": "修改群成员群名片",
+        "params": [
+            ("user_id", "integer", "是", "目标用户QQ号"),
+            ("card", "string", "是", "新群名片内容，空字符串=清除"),
+        ],
+        "example": "set_group_card(user_id=123456, card=\"新昵称\") — 修改某人的群名片",
+    },
+    "delete_msg": {
+        "desc": "撤回消息（需bot是管理员才能撤回他人消息）",
+        "params": [
+            ("message_id", "integer", "是", "要撤回的消息ID"),
+        ],
+        "example": "delete_msg(message_id=12345) — 撤回该消息",
+    },
+    "whole_ban": {
+        "desc": "全员禁言/解禁（需bot是群主）",
+        "params": [
+            ("enable", "boolean", "是", "true=开启全员禁言，false=关闭"),
+        ],
+        "example": "whole_ban(enable=true) — 开启全员禁言",
+    },
+    "set_admin": {
+        "desc": "设置/取消管理员（需bot是群主）",
+        "params": [
+            ("user_id", "integer", "是", "目标用户QQ号"),
+            ("enable", "boolean", "是", "true=设为管理，false=取消管理"),
+        ],
+        "example": "set_admin(user_id=123456, enable=true) — 将该用户设为管理员",
+    },
+    # ── 方向三: 互动与内容感知 ──
+    "send_poke": {
+        "desc": "戳一戳群成员",
+        "params": [
+            ("user_id", "integer", "是", "要戳的用户QQ号"),
+        ],
+        "example": "send_poke(user_id=123456) — 戳一下这个用户",
+    },
+    "send_like": {
+        "desc": "给用户点赞（私聊场景）",
+        "params": [
+            ("user_id", "integer", "是", "要对其点赞的用户QQ号"),
+            ("times", "integer", "否", "点赞次数，默认1，不超过10"),
+        ],
+        "example": "send_like(user_id=123456, times=3) — 给该用户点3个赞",
+    },
+    "ocr_image": {
+        "desc": "OCR识别图片中的文字（仅Windows端NapCat支持）",
+        "params": [
+            ("image", "string", "是", "图片路径、URL或Base64"),
+        ],
+        "example": "ocr_image(image=\"http://example.com/img.png\") — 识别图片文字",
+    },
+    "voice_to_text": {
+        "desc": "语音转文字",
+        "params": [
+            ("message_id", "integer", "是", "语音消息的消息ID"),
+        ],
+        "example": "voice_to_text(message_id=12345) — 将语音消息转为文字",
+    },
+    # ── 方向四: Agent 认知增强 ──
+    "think": {
+        "desc": "梳理思路，规划复杂操作步骤。结果仅自己可见。",
+        "params": [
+            ("reasoning", "string", "是", "思考内容：分析问题、需要哪些信息、分几步执行"),
+        ],
+        "example": "think(reasoning=\"我需要找出谁发了广告。1. 查询最近消息中的广告关键词 2. 找出违规用户 3. 按规则处理\") — 多步推理前先思考",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Non-tool guide texts (accessible via tool_help)
+# ---------------------------------------------------------------------------
+
+_GUIDE_TEXTS = {
+    "chain_guide": {
+        "desc": "工具链式调用指南",
+        "content": (
+            "复杂操作按「分析→收集信息→决策→执行」流程：\n"
+            "- 需要多步推理时，先调用 think(reasoning=\"...\") 梳理步骤\n"
+            "- 不了解群组状况时，先调用查询工具获取上下文（如 get_member_list + get_essence_list + get_shut_list）\n"
+            "- 不知道对方身份时，先调用 get_member_info 确认角色\n"
+            "- 需要证据时，先调用 query_history 搜索相关消息，再执行操作\n"
+            "- 操作完成后可视情况用 send_message 通知结果"
+        ),
+    },
+    "decision_guide": {
+        "desc": "常见任务工具组合建议",
+        "content": (
+            "- 群状况概览 → get_group_info + get_member_list + get_essence_list\n"
+            "- 查某人 → get_member_info(user_id) + query_history(user_id)\n"
+            "- 处理违规 → think → query_history(关键词) → mute_user / kick_user / delete_msg\n"
+            "- 精华操作 → set_essence / remove_essence，需提供消息ID\n"
+            "- 改名片 → set_group_card(user_id, card)\n"
+            "- 语音/图片 → voice_to_text / ocr_image 获取内容后再回答"
+        ),
+    },
 }
 
 
 def _help_all() -> dict:
     lines = ["可用工具一览：\n"]
-    for i, (name, info) in enumerate(_HELP_TEXTS.items(), 1):
-        lines.append(f"{i}. {name} — {info['desc']}")
-    lines.append(f"\n共 {len(_HELP_TEXTS)} 个工具。查看某工具详情请用 tool_help(tool_name=\"xxx\")。")
+    lines.append("【查询】get_current_time / query_history / get_group_info / get_member_info / get_member_list / get_essence_list / get_shut_list")
+    lines.append("【管理】set_essence / remove_essence / mute_user / kick_user / set_group_card / delete_msg / whole_ban / set_admin")
+    lines.append("【互动】send_message / react_emoji(点赞128077,笑哭128514,心10084) / send_poke / send_like")
+    lines.append("【感知】ocr_image(仅Windows) / voice_to_text / resolve_forward")
+    lines.append("【辅助】think / tool_help")
+    lines.append(f"\n共 {len(_HELP_TEXTS)} 个工具。")
+    lines.append("查看某工具详情请用 tool_help(tool_name=\"xxx\")。")
+    lines.append("查看工具链式调用指南请用 tool_help(tool_name=\"chain_guide\")。")
+    lines.append("查看常见任务决策指南请用 tool_help(tool_name=\"decision_guide\")。")
     return {"text": "\n".join(lines)}
 
 
 def _help_single(tool_name: str) -> dict:
+    guide = _GUIDE_TEXTS.get(tool_name)
+    if guide:
+        return {"text": f"**{tool_name}** — {guide['desc']}\n\n{guide['content']}"}
+
     info = _HELP_TEXTS.get(tool_name)
     if not info:
-        return {"text": f"未找到工具 {tool_name!r}。可用工具：{', '.join(_HELP_TEXTS)}"}
+        return {"text": f"未找到工具 {tool_name!r}。可用工具：{', '.join(_HELP_TEXTS)}。可用指南：{', '.join(_GUIDE_TEXTS)}"}
     lines = [f"**{tool_name}** — {info['desc']}\n"]
     if info["params"]:
         lines.append("参数：")
