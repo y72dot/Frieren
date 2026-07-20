@@ -840,6 +840,64 @@ class TestEdgeCases:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# spam cleanup (lazy eviction when dict exceeds _SPAM_MAX_ENTRIES)
+# ---------------------------------------------------------------------------
+
+
+class TestSpamCleanup:
+    async def test_spam_cleanup_on_overflow(self, monkeypatch):
+        """When _spam_last exceeds _SPAM_MAX_ENTRIES, stale entries are evicted."""
+        from plugins import action_queue as aq
+
+        aq.reset_state()
+
+        # Set a very low max to trigger cleanup easily
+        monkeypatch.setattr(aq, "_SPAM_MAX_ENTRIES", 5)
+        aq._spam_window = 999.0  # huge window so entries stay "fresh"
+
+        spam_actions = {"send_group_msg"}
+
+        # Reconfigure to enable spam for our action
+        old_spam = aq._spam_actions
+        old_window = aq._spam_window
+        aq._spam_actions = spam_actions
+
+        try:
+            # Add entries up to the max
+            for i in range(5):
+                key = f"send_group_msg|{{\"group_id\": {i}, \"message\": \"msg{i}\"}}"
+                aq._spam_last[key] = time.monotonic()
+
+            assert len(aq._spam_last) == 5
+
+            # Add one more – should trigger cleanup
+            aq._spam_last["extra_key"] = time.monotonic()
+            assert len(aq._spam_last) == 6  # not cleaned yet (lazy, called from _check_spam)
+
+            # Trigger _check_spam with a new key to invoke _maybe_cleanup_spam
+            # First, make a key that does NOT exist yet in _spam_last
+            # We use a large spam_window so all entries are considered "fresh" -
+            # but cleanup uses cutoff = now - _spam_window * 2
+            # With huge spam_window, cutoff is far in the past, so nothing gets cleaned.
+            # Instead, set a tiny window so the existing entries look stale.
+            aq._spam_window = 0.001  # tiny window
+            await asyncio.sleep(0.01)  # ensure entries are older than cutoff
+
+            # Now _check_spam for a new entry should trigger cleanup
+            result = await aq._check_spam(
+                {"action": "send_group_msg", "group_id": 999, "message": "new"}
+            )
+            # Should pass (not spam), and cleanup should have run
+            assert result is False
+            # After cleanup, old stale entries should be gone
+            assert len(aq._spam_last) < 6
+        finally:
+            aq._spam_actions = old_spam
+            aq._spam_window = old_window
+            aq.reset_state()
+
+
 class TestConfigParsing:
     def test_default_config(self):
         """Default ActionQueueConfig has sensible values."""

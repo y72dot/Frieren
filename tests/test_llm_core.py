@@ -222,7 +222,7 @@ class TestSessionCache:
     @pytest.mark.asyncio
     async def test_session_reuse_within_ttl(self, bot_with_llm):
         """Same session_key within TTL reuses messages list."""
-        from plugins.llm_core import _lazy_init, llm_core_handler, _session_cache
+        from plugins.llm_core import _lazy_init, _session_cache, llm_core_handler
 
         _session_cache.clear()
         _lazy_init(bot_with_llm)
@@ -271,7 +271,7 @@ class TestSessionCache:
     @pytest.mark.asyncio
     async def test_session_ttl_zero_always_fresh(self, bot_with_llm):
         """session_ttl=0 disables cache, every call starts fresh."""
-        from plugins.llm_core import _lazy_init, llm_core_handler, _session_cache
+        from plugins.llm_core import _lazy_init, _session_cache, llm_core_handler
 
         _session_cache.clear()
         _lazy_init(bot_with_llm)
@@ -316,7 +316,7 @@ class TestSessionCache:
     @pytest.mark.asyncio
     async def test_session_expired_after_ttl(self, bot_with_llm, monkeypatch):
         """Session entry older than TTL starts a fresh session."""
-        from plugins.llm_core import _lazy_init, llm_core_handler, _session_cache
+        from plugins.llm_core import _lazy_init, _session_cache, llm_core_handler
 
         _session_cache.clear()
         _lazy_init(bot_with_llm)

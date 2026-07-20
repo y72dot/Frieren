@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import pytest
 
 from src.core.llm import ToolCall
@@ -42,8 +44,9 @@ class TestLlmToolsHandler:
     @pytest.mark.asyncio
     async def test_execute_get_current_time(self, bot):
         """get_current_time returns datetime string."""
-        from plugins.llm_tools import llm_tools_handler
         import re
+
+        from plugins.llm_tools import llm_tools_handler
 
         tc = ToolCall(id="call_0", name="get_current_time", arguments={})
         response_buf: dict = {}
@@ -578,15 +581,16 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_time_after(self, bot):
         """query_history with time_after filters messages."""
+        from datetime import datetime
+
         from plugins.llm_tools import llm_tools_handler
-        from datetime import datetime, timezone
 
         bot.msg_store.record_bot_message(1, 123, 100, "Alice", "old", 1000, True)
         bot.msg_store.record_bot_message(2, 123, 200, "Bob", "new", 2000, True)
 
         # Compute local-time datetime string that round-trips to the Unix timestamp
         dt_after = (
-            datetime.fromtimestamp(1500, tz=timezone.utc)
+            datetime.fromtimestamp(1500, tz=UTC)
             .astimezone()
             .replace(tzinfo=None)
             .strftime("%Y-%m-%d %H:%M:%S")
@@ -613,14 +617,15 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_time_before(self, bot):
         """query_history with time_before filters messages."""
+        from datetime import datetime
+
         from plugins.llm_tools import llm_tools_handler
-        from datetime import datetime, timezone
 
         bot.msg_store.record_bot_message(1, 123, 100, "Alice", "old", 1000, True)
         bot.msg_store.record_bot_message(2, 123, 200, "Bob", "new", 2000, True)
 
         dt_before = (
-            datetime.fromtimestamp(1500, tz=timezone.utc)
+            datetime.fromtimestamp(1500, tz=UTC)
             .astimezone()
             .replace(tzinfo=None)
             .strftime("%Y-%m-%d %H:%M:%S")
@@ -673,14 +678,15 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_private_with_time(self, bot):
         """query_history in private chat supports time_after."""
+        from datetime import datetime
+
         from plugins.llm_tools import llm_tools_handler
-        from datetime import datetime, timezone
 
         bot.msg_store.record_bot_message(1, None, 999, "User", "old", 1000, False)
         bot.msg_store.record_bot_message(2, None, 999, "User", "new", 2000, False)
 
         dt_after = (
-            datetime.fromtimestamp(1500, tz=timezone.utc)
+            datetime.fromtimestamp(1500, tz=UTC)
             .astimezone()
             .replace(tzinfo=None)
             .strftime("%Y-%m-%d %H:%M:%S")
@@ -840,8 +846,9 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_default_limit_30(self, bot):
         """query_history no-arg uses default limit=30 without exclude_user_ids."""
-        from plugins.llm_tools import llm_tools_handler
         from unittest.mock import patch
+
+        from plugins.llm_tools import llm_tools_handler
 
         response_buf: dict = {}
         with patch.object(bot.msg_store, "query", wraps=bot.msg_store.query) as mock_query:
@@ -865,8 +872,9 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_explicit_limit(self, bot):
         """query_history with explicit limit is clamped at 50."""
-        from plugins.llm_tools import llm_tools_handler
         from unittest.mock import patch
+
+        from plugins.llm_tools import llm_tools_handler
 
         response_buf: dict = {}
         with patch.object(bot.msg_store, "query", wraps=bot.msg_store.query) as mock_query:

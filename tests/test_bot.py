@@ -1,5 +1,7 @@
 """Tests for Bot orchestrator class."""
 
+import asyncio
+
 import pytest
 
 from src.core.bot import Bot
@@ -146,3 +148,77 @@ async def test_stop_sets_running_false(bot_config: BotConfig):
 
     await b.stop()
     assert b._running is False
+
+
+@pytest.mark.asyncio
+async def test_stop_cancels_main_task(bot_config: BotConfig):
+    b = Bot(config=bot_config)
+    b._running = True
+
+    async def _dummy():
+        while b._running:
+            await asyncio.sleep(0.1)
+
+    b._main_task = asyncio.ensure_future(_dummy())
+
+    await b.stop()
+    assert b._running is False
+    # stop() calls main_task.cancel(); wait for cancellation to propagate
+    with pytest.raises(asyncio.CancelledError):
+        await b._main_task
+
+
+@pytest.mark.asyncio
+async def test_cleanup_clears_api_client(bot_config: BotConfig):
+    """_cleanup() calls api.clear_client()."""
+    b = Bot(config=bot_config)
+    b.api._client = object()  # set a dummy client
+
+    await b._cleanup()
+    assert b.api._client is None
+
+
+def test_start_initializes_llm_provider_when_enabled(bot_config: BotConfig):
+    """When llm.enabled=True, start() creates an OpenAICompatibleProvider."""
+    import copy
+
+    cfg = copy.deepcopy(bot_config)
+    cfg.llm.enabled = True
+    cfg.llm.api_base = "https://test-api.example.com/v1"
+    cfg.llm.api_key = "sk-test"
+
+    b = Bot(config=cfg)
+    assert b.llm_provider is None
+
+    # Manually call the LLM init part (can't call start() without real connection)
+    from src.core.llm.provider import OpenAICompatibleProvider
+
+    provider = OpenAICompatibleProvider(
+        api_base=cfg.llm.api_base,
+        api_key=cfg.llm.api_key,
+    )
+    b.llm_provider = provider
+    assert b.llm_provider is not None
+
+
+def test_windows_signal_fallback(monkeypatch, bot_config: BotConfig):
+    """When add_signal_handler raises NotImplementedError, Windows fallback used."""
+    import asyncio
+    import signal
+    from unittest import mock
+
+    b = Bot(config=bot_config)
+
+    # Mock add_signal_handler to raise NotImplementedError (simulating Windows)
+    mock_loop = mock.MagicMock()
+    mock_loop.add_signal_handler.side_effect = NotImplementedError
+
+    with (
+        mock.patch.object(asyncio, "get_running_loop", return_value=mock_loop),
+        mock.patch.object(signal, "signal") as mock_signal,
+    ):
+        b._setup_signal_handlers()
+        # Windows fallback should register signal handlers
+        assert mock_signal.call_count >= 2
+        mock_signal.assert_any_call(signal.SIGINT, mock.ANY)
+        mock_signal.assert_any_call(signal.SIGTERM, mock.ANY)

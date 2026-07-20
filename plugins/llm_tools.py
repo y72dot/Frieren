@@ -327,7 +327,7 @@ async def _execute(
         if not msgs:
             return {"text": "没有找到相关消息。"}
 
-        from plugins.llm_memory import _format_msg, _clean_content
+        from plugins.llm_memory import _clean_content, _format_msg
 
         lines = [_format_msg(m, bot.config.bot.qq, include_time=True) for m in msgs if _clean_content(m.content)]
         return {"text": "找到以下消息：\n" + "\n".join(lines)}

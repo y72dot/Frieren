@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -76,7 +76,7 @@ class OpenAICompatibleProvider:
     def _write_log(self, content: str) -> None:
         """Append debug entry to logs/llm.log."""
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        ts = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
         with open(self._log_path, "a", encoding="utf-8") as f:
             f.write(f"\n{'='*60}\n[{ts}]\n{content}\n")
 
