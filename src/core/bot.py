@@ -37,6 +37,11 @@ class Bot:
         self.event_bus = EventBus()
         self.plugin_manager = PluginManager(bus=self.message_bus)
         self.llm_provider = None
+        # LLM subsystems (initialized in _init_llm_subsystems)
+        self.session_mgr = None
+        self.agent_loop = None
+        self.memory_mgr = None
+        self.skill_mgr = None
         self._running = False
         self._main_task: asyncio.Task[None] | None = None
 
@@ -98,6 +103,7 @@ class Bot:
                 api_key=cfg.llm.api_key,
             )
             logger.info(f"LLM provider initialized: {cfg.llm.model} @ {cfg.llm.api_base}")
+            self._init_llm_subsystems()
         else:
             logger.info("LLM is disabled")
 
@@ -256,5 +262,70 @@ class Bot:
 
     async def _cleanup(self) -> None:
         """Release resources on shutdown."""
+        # Shut down LLM subsystems
+        if self.session_mgr is not None:
+            self.session_mgr.shutdown()
+        if self.memory_mgr is not None:
+            self.memory_mgr.close()
         self.api.clear_client()
         logger.info("Bot stopped")
+
+    # ------------------------------------------------------------------
+    # internal: LLM subsystem initialization
+    # ------------------------------------------------------------------
+
+    def _init_llm_subsystems(self) -> None:
+        """Initialise agent subsystems: SessionManager, AgentLoop, Memory, Skills."""
+        cfg = self.config
+        if cfg is None or not cfg.llm.enabled:
+            return
+
+        from src.core.llm.session_manager import SessionManager
+        from src.core.llm.agent_loop import AgentLoop, LoopConfig
+        from src.core.llm.circuit_breaker import CircuitBreaker
+        from src.core.llm.memory_manager import MemoryConfig, MemoryManager
+        from src.core.llm.skill_manager import SkillManager, SkillsConfig
+        from plugins.llm_tools import _catalog, _executor
+
+        # Session manager
+        self.session_mgr = SessionManager(
+            ttl=cfg.llm.session_ttl,
+            keep_recent_pairs=cfg.llm.session.keep_recent_pairs,
+            max_context_tokens=cfg.llm.session.max_context_tokens,
+        )
+        self.session_mgr.init_db()
+        recovered = self.session_mgr.recover()
+        if recovered:
+            logger.info(f"LLM sessions recovered: {recovered}")
+
+        # Agent loop
+        self.agent_loop = AgentLoop(
+            catalog=_catalog,
+            session_mgr=self.session_mgr,
+            executor=_executor,
+            breaker=CircuitBreaker(),
+            config=LoopConfig(max_turns=cfg.llm.max_turns),
+        )
+
+        # Memory manager
+        memory_config = MemoryConfig(
+            episodic_enabled=cfg.llm.memory.episodic_enabled,
+            episodic_max=cfg.llm.memory.episodic_max,
+            episodic_search_limit=cfg.llm.memory.episodic_search_limit,
+            semantic_enabled=cfg.llm.memory.semantic_enabled,
+            consolidation_enabled=cfg.llm.memory.consolidation_enabled,
+        )
+        self.memory_mgr = MemoryManager(config=memory_config)
+        self.memory_mgr.init_db()
+
+        # Skill manager
+        skills_config = SkillsConfig(
+            enabled=cfg.llm.skills.enabled,
+            skills_dir=cfg.llm.skills.skills_dir,
+            auto_reload=cfg.llm.skills.auto_reload,
+        )
+        self.skill_mgr = SkillManager(catalog=_catalog, config=skills_config)
+        self.skill_mgr.discover(self)
+
+        self._agent_initialized = True
+        logger.info("LLM agent subsystems initialized")

@@ -244,8 +244,6 @@ class TestLLMChainSession:
     @pytest.mark.asyncio
     async def test_session_cache_reuse(self, e2e_llm_bot):
         """Same session_key in TTL → appends user message instead of creating new."""
-        import plugins.llm_core as lc
-
         provider = _make_provider_responses(
             e2e_llm_bot,
             [LlmResponse(text="Reply 1"), LlmResponse(text="Reply 2")],
@@ -256,7 +254,7 @@ class TestLLMChainSession:
         await dispatch_raw_event(e2e_llm_bot, raw1)
 
         # Session should exist in cache
-        assert "group:456" in lc._session_cache
+        assert "group:456" in e2e_llm_bot.session_mgr._cache
 
         # Second message reuses session (TTL=3600 by default, so cache is fresh)
         raw2 = _raw_group_at_msg(msg_id=2, text="Second message")

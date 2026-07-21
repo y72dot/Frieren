@@ -57,6 +57,20 @@ def _reset_all_module_state() -> None:
     lt._CHARACTER_SECTIONS = None
     lt._CHARACTER_FULL_TEXT = None
 
+    # Clear persisted LLM sessions between tests
+    import sqlite3
+    from pathlib import Path
+
+    db_path = Path("data/llm_state.db")
+    if db_path.exists():
+        try:
+            conn = sqlite3.connect(str(db_path))
+            conn.execute("DELETE FROM sessions")
+            conn.commit()
+            conn.close()
+        except (sqlite3.OperationalError, Exception):
+            pass
+
     # Repeater plugin state (may not be loaded)
     try:
         import plugins.repeater as rp

@@ -108,6 +108,36 @@ class ActionQueueConfig:
 
 
 @dataclass
+class LLMSessionConfig:
+    """Session persistence and pruning configuration."""
+
+    persist: bool = True
+    pruning_strategy: str = "hybrid"  # "hybrid" | "recent" | "none"
+    keep_recent_pairs: int = 3
+    max_context_tokens: int = 4096
+
+
+@dataclass
+class LLMMemoryConfig:
+    """Memory subsystem configuration."""
+
+    episodic_enabled: bool = True
+    episodic_max: int = 1000
+    episodic_search_limit: int = 5
+    semantic_enabled: bool = True
+    consolidation_enabled: bool = True
+
+
+@dataclass
+class LLMSkillsConfig:
+    """Skill system configuration."""
+
+    enabled: bool = True
+    skills_dir: str = "config/skills"
+    auto_reload: bool = True
+
+
+@dataclass
 class LLMConfig:
     enabled: bool = False
     api_base: str = "https://api.openai.com/v1"
@@ -132,6 +162,9 @@ class LLMConfig:
     )
     max_turns: int = 8
     session_ttl: int = 3600  # seconds, 0 = disable cache (fresh session every time)
+    session: LLMSessionConfig = field(default_factory=LLMSessionConfig)
+    memory: LLMMemoryConfig = field(default_factory=LLMMemoryConfig)
+    skills: LLMSkillsConfig = field(default_factory=LLMSkillsConfig)
 
 
 @dataclass
@@ -281,6 +314,10 @@ def _parse_action_queue_section(data: dict[str, Any]) -> ActionQueueConfig:
 
 
 def _parse_llm_section(data: dict[str, Any]) -> LLMConfig:
+    session_raw = data.get("session", {})
+    memory_raw = data.get("memory", {})
+    skills_raw = data.get("skills", {})
+
     return LLMConfig(
         enabled=bool(data.get("enabled", False)),
         api_base=str(data.get("api_base", "https://api.openai.com/v1")),
@@ -331,6 +368,24 @@ def _parse_llm_section(data: dict[str, Any]) -> LLMConfig:
         ),
         max_turns=int(data.get("max_turns", 8)),
         session_ttl=int(data.get("session_ttl", 300)),
+        session=LLMSessionConfig(
+            persist=bool(session_raw.get("persist", True)),
+            pruning_strategy=str(session_raw.get("pruning_strategy", "hybrid")),
+            keep_recent_pairs=int(session_raw.get("keep_recent_pairs", 3)),
+            max_context_tokens=int(session_raw.get("max_context_tokens", 4096)),
+        ),
+        memory=LLMMemoryConfig(
+            episodic_enabled=bool(memory_raw.get("episodic_enabled", True)),
+            episodic_max=int(memory_raw.get("episodic_max", 1000)),
+            episodic_search_limit=int(memory_raw.get("episodic_search_limit", 5)),
+            semantic_enabled=bool(memory_raw.get("semantic_enabled", True)),
+            consolidation_enabled=bool(memory_raw.get("consolidation_enabled", True)),
+        ),
+        skills=LLMSkillsConfig(
+            enabled=bool(skills_raw.get("enabled", True)),
+            skills_dir=str(skills_raw.get("skills_dir", "config/skills")),
+            auto_reload=bool(skills_raw.get("auto_reload", True)),
+        ),
     )
 
 

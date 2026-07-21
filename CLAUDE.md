@@ -21,16 +21,28 @@ No NoneBot / AstrBot / Koishi — core is self-written.
 
 ### Core Subsystems
 
-| 子系统               | 职责                                                                           |
-| -------------------- | ------------------------------------------------------------------------------ |
-| `MessageBus`       | 中央总线，所有插件订阅和 API 调用都经过它                                      |
-| `FilterManager`    | 统一过滤（全局 + 插件级），挂载于`bot.filter_mgr`，dispatch 前拦截           |
-| `EventBus`         | 原始 napcat 事件 → 内部`Event`；记录历史；触发总线 dispatch                 |
-| `MessageStore`     | SQLite 持久化消息历史，插件可通过`bot.msg_store` 同步查询                    |
-| `PluginManager`    | 扫描/导入/注册插件到总线 EXTERNAL 队列；`@subscribe` 适配器                  |
-| `ApiClient`        | API 调用包装成 ACTION 消息入队，由`_QQExec` 最终执行                         |
-| `action_queue`     | p=1 拦截所有 ACTION，四层过滤：block → bypass → spam(去重) → rate-limit     |
-| `LlmSessionLogger` | 每会话 LLM 对话日志 →`logs/llm_sessions/`，loguru sink + session-key filter |
+| 子系统               | 职责                                                   |
+| -------------------- | ------------------------------------------------------ |
+| `MessageBus`       | 中央总线，所有消息经此流转                              |
+| `FilterManager`    | 全局+插件级过滤，`bot.filter_mgr`，dispatch 前拦截    |
+| `EventBus`         | napcat 事件→内部`Event`；记录历史；触发 dispatch      |
+| `MessageStore`     | SQLite 消息历史，`bot.msg_store` 同步查询              |
+| `PluginManager`    | 扫描/注册插件；`@subscribe` 适配器                     |
+| `ApiClient`        | API 调用的 ACTION 封装，`_QQExec` 最终执行            |
+| `action_queue`     | p=1 拦截 ACTION：block→bypass→spam→rate-limit         |
+| `LlmSessionLogger` | 每会话日志 →`logs/llm_sessions/`                       |
+
+### LLM Agent 子系统（`src/core/llm/`，`Bot._init_llm_subsystems()` 挂载）
+
+| 类                  | 职责                                                  |
+| ------------------- | ----------------------------------------------------- |
+| `ToolCatalog`     | `ToolDef` 注册，`get_defs(user_is_admin)` 过滤       |
+| `ToolExecutor`    | 验证→权限→缓存→执行→审计，DESTRUCTIVE 写 `logs/audit.log` |
+| `SessionManager`  | TTL + `data/llm_state.db` 持久化 + crash 恢复 + 剪枝 |
+| `AgentLoop`       | ReAct 循环，运行时读`bot.llm_provider`               |
+| `CircuitBreaker`  | 连续错误/重复工具调用熔断                              |
+| `MemoryManager`   | 工作记忆(内存)+情景(episodes表)+语义(facts表)         |
+| `SkillManager`    | `config/skills/` 渐进式加载+热重载                    |
 
 ### Message Types & Dispatch Semantics
 
@@ -55,19 +67,12 @@ No NoneBot / AstrBot / Koishi — core is self-written.
 
 ### Event Type Mapping (EventBus.parse)
 
-napcat 原始类型 → `Event.type`：
-
-- `GroupMessageEvent` → `"message.group"`
-- `PrivateMessageEvent` → `"message.private"`
-- `NoticeEvent` → `"notice.{notice_type}"`
-- `dict` → 按 `post_type` 分发（message/notice/request/meta_event）
-- 其他 → `None`（丢弃）
+`GroupMessageEvent`→`message.group` / `PrivateMessageEvent`→`message.private` / `NoticeEvent`→`notice.{notice_type}` / `dict`-按`post_type`分发 / 其他→丢弃
 
 ### Plugin Discovery
 
-- `auto_discover()` scans `plugins/*.py`，文件名以 `_` 开头则跳过
-- 修饰器 (`@command`, `@on_regex`, `@on_keyword`, `@on_notice`) 自动附加 `__plugin__`
-- 禁用插件：将其 `__plugin__.name` 列入 `config/bot.toml` → `[plugin].disabled_plugins`
+- `auto_discover()` scans `plugins/*.py`，`_` 开头跳过；修饰器附加 `__plugin__`
+- 禁用：`[plugin].disabled_plugins` 列 `__plugin__.name`
 
 ### Bot Lifecycle
 
@@ -78,21 +83,16 @@ napcat 原始类型 → `Event.type`：
 
 ### Constraints
 
-- 插件只能用 `from src.plugin.base import Event`，禁止导入 napcat 类型；不新增 `src/` 和 `plugins/` 之外的顶层目录；不引入新依赖框架
-- Phase 1 无中间件链：一个事件最多被一个插件消费
-- Commit format: `type: description` (feat/fix/refactor/test/docs/chore)
+- 插件禁导入 napcat 类型（用 `from src.plugin.base import Event`）；不新增顶层目录；不引入新框架
+- 一个事件最多被一个插件消费（无中间件链）；Commit: `type: description`
 
 ### Logging & Tracing
 
-- 格式串：`time | level | trace={extra[trace_id]} | name:func:line | message`，trace_id 固定第三列
-- grep trace_id 得完整链路：`REQUEST START`(event_bus, INFO) → `Filter pass/block`(filter_mgr, 放行原因见下) → `match/handle+耗时`(message_bus) → `API ok status/elapsed/message_id`(api_client) → `REQUEST END`(INFO)
-- Filter pass 原因：disabled / bypass(admin|bot) / whitelist / off / not_configured
-- API 日志：`API ok {action} status={status} elapsed={elapsed}ms message_id={msg_id} retcode={retcode}`
-- 插件内部通过 loguru logger 记决策点（INFO=触发，DEBUG=跳过原因），match/handle 由框架统一记录
-- LLM 流程在 `bot.log` 可见：`llm_gate trigger` → `LLM session start` → `final reply` → `llm_sender chunks` → `session end`
-- `LlmSessionLogger` 同时写 `logs/llm_sessions/`（不动）
-- 日志级别：生命周期/REQUEST 信封/插件触发/LLM关键 → INFO；match/handle/API调用/Filter → DEBUG
-- **注意**：`llm_core` 的 `_session_cache` 是内存 dict，bot 重启即清空，即使 TTL 未过期也会触发 `[NEW]`
+- 格式串：`time | level | trace={extra[trace_id]} | name:func:line | message`
+- grep trace_id 得完整链路：`REQUEST START` → `Filter pass/block`(原因: disabled/bypass/whitelist/off) → `match/handle+耗时` → `API ok status/elapsed/message_id` → `REQUEST END`
+- LLM 链路：`llm_gate trigger` → `LLM session [NEW]/reuse` → `final reply` → `llm_sender chunks` → `session end`
+- INFO：生命周期/REQUEST 信封/插件触发/LLM关键；DEBUG：match/handle/API/Filter
+- Session 持久化到 `data/llm_state.db`，重启可恢复
 
 ### Startup
 

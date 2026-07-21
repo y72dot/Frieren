@@ -126,14 +126,17 @@ class TestMultiTurnScenarios:
     @pytest.mark.asyncio
     async def test_session_ttl_expiry(self, e2e_llm_bot):
         """Pre-set expired session → new trigger creates NEW session."""
-        import plugins.llm_core as lc
+        from src.core.llm.session_manager import Session
 
         # Manually set an expired session
         old_time = time.time() - 99999  # far in the past (TTL=3600)
-        lc._session_cache["group:456"] = (
-            old_time,
-            [{"role": "system", "content": "old"}, {"role": "user", "content": "old msg"}],
+        old_session = Session(
+            session_key="group:456",
+            messages=[{"role": "system", "content": "old"}, {"role": "user", "content": "old msg"}],
+            created_at=old_time,
+            last_active=old_time,
         )
+        e2e_llm_bot.session_mgr._cache["group:456"] = old_session
 
         _make_provider(e2e_llm_bot, [LlmResponse(text="Fresh session reply.")])
 
@@ -146,7 +149,8 @@ class TestMultiTurnScenarios:
         )
         # Session should be updated with fresh timestamp, and it's a NEW session
         # (old session was expired so messages[1] should NOT be "old msg")
-        _, messages = lc._session_cache["group:456"]
+        session = e2e_llm_bot.session_mgr._cache["group:456"]
+        messages = session.messages
         # New session has system + single user message (not accumulated from old)
         assert messages[1]["role"] == "user"
         assert messages[1]["content"] != "old msg"
