@@ -105,6 +105,7 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
         is_new = session.turn_count == 0
         if is_new:
             logger.info(f"LLM session start: key={session_key} nickname={nickname} text={text[:80]}")
+            _inject_recent_history(session.messages, session_key, bot, payload)
             session_log.session_new(len(session.messages))
         else:
             logger.info(f"LLM session reuse: key={session_key} nickname={nickname} text={text[:80]}")
@@ -122,6 +123,7 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
         else:
             messages = _new_session(cfg.system_prompt, user_content)
             logger.info(f"LLM session start: key={session_key} nickname={nickname} text={text[:80]}")
+            _inject_recent_history(messages, session_key, bot, payload)
             session_log.session_new(len(messages))
         _session_cache[session_key] = (now, messages)
         session = Session(
@@ -284,6 +286,56 @@ def _new_session(system_prompt: str, user_content: str) -> list[dict]:
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_content},
     ]
+
+
+def _inject_recent_history(messages: list[dict], session_key: str, bot, payload: dict) -> None:
+    """Inject recent group chat history into a new session's messages list.
+
+    Inserts a synthetic assistant tool_call + tool result pair at positions 1-2,
+    so the LLM sees recent chat context without calling query_history itself.
+    """
+    if not payload.get("is_group", False):
+        return
+
+    group_id = payload.get("group_id")
+    if group_id is None:
+        return
+
+    msgs = bot.msg_store.query(group_id=group_id, is_group=True, n=30)
+    if not msgs:
+        return
+
+    from plugins.llm_memory import _format_msg
+
+    bot_qq = bot.config.bot.qq
+    lines = [_format_msg(m, bot_qq=bot_qq, include_time=True) for m in msgs]
+    result_text = "找到以下最近消息：\n" + "\n".join(lines)
+
+    call_id = f"auto_init_{session_key}"
+
+    assistant_msg = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": call_id,
+                "type": "function",
+                "function": {
+                    "name": "query_history",
+                    "arguments": json.dumps({"limit": 30}, ensure_ascii=False),
+                },
+            }
+        ],
+    }
+
+    tool_msg = {
+        "role": "tool",
+        "tool_call_id": call_id,
+        "content": result_text,
+    }
+
+    messages.insert(1, assistant_msg)
+    messages.insert(2, tool_msg)
 
 
 def _make_assistant_tool_msg(tool_calls: list) -> dict:
