@@ -51,6 +51,12 @@ def _reset_all_module_state() -> None:
     lc._tools_registry = []
     reset_aq()
 
+    # Character doc cache
+    import plugins.llm_tools as lt
+
+    lt._CHARACTER_SECTIONS = None
+    lt._CHARACTER_FULL_TEXT = None
+
     # Repeater plugin state (may not be loaded)
     try:
         import plugins.repeater as rp

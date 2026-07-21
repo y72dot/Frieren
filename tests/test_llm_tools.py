@@ -23,7 +23,7 @@ class TestToolDefs:
     def test_tool_count(self):
         from plugins.llm_tools import TOOL_DEFS
 
-        assert len(TOOL_DEFS) == 24
+        assert len(TOOL_DEFS) == 25
 
     def test_all_tool_names_unique(self):
         from plugins.llm_tools import TOOL_DEFS
@@ -1056,7 +1056,7 @@ class TestToolHelp:
             bot,
         )
         text = response_buf["results"][0]["result"]["text"]
-        assert "共 24 个工具" in text
+        assert "共 25 个工具" in text
 
 
 # ====================================================================
@@ -1947,3 +1947,84 @@ class TestThink:
         assert len(response_buf["results"]) == 2
         assert response_buf["results"][0]["result"]["acknowledged"] is True
         assert response_buf["results"][1]["result"]["acknowledged"] is True
+
+
+# ====================================================================
+# 方向五: 角色设定查询
+# ====================================================================
+
+
+class TestQueryCharacter:
+    def test_tool_definition_exists(self):
+        """query_character should be in TOOL_DEFS."""
+        from plugins.llm_tools import TOOL_DEFS
+
+        names = [td["function"]["name"] for td in TOOL_DEFS]
+        assert "query_character" in names
+
+    def test_query_by_character_name(self):
+        """Query by a character name returns their description paragraph."""
+        import plugins.llm_tools as lt
+
+        lt._CHARACTER_SECTIONS = None
+        lt._CHARACTER_FULL_TEXT = None
+
+        result = lt._query_character("辛美尔")
+        assert "辛美尔" in result["text"]
+        assert "Himmel" in result["text"]
+
+    def test_query_by_section_title(self):
+        """Query by section title returns that section."""
+        from plugins.llm_tools import _query_character
+
+        result = _query_character("魔法介绍")
+        assert len(result["text"]) > 200
+        assert "魔法" in result["text"]
+
+    def test_query_no_match(self):
+        """Unknown keyword returns helpful error message."""
+        from plugins.llm_tools import _query_character
+
+        result = _query_character("不存在的关键词xyz")
+        assert "未找到" in result["text"]
+
+    def test_truncate_long_content(self):
+        """Long content should be truncated with a note."""
+        from plugins.llm_tools import _truncate_content
+
+        result = _truncate_content("x" * 2000)
+        assert len(result) <= 1600
+        assert "已截断" in result
+
+    def test_help_text_exists(self):
+        """query_character should have help text."""
+        from plugins.llm_tools import _help_single
+
+        result = _help_single("query_character")
+        assert "人物设定" in result["text"]
+        assert "keyword" in result["text"]
+
+    @pytest.mark.asyncio
+    async def test_execute_integration(self, bot):
+        """query_character via _execute dispatch returns expected content."""
+        from plugins.llm_tools import llm_tools_handler
+
+        response_buf: dict = {}
+        await llm_tools_handler(
+            {
+                "llm_type": "tool",
+                "tool_calls": [
+                    {"id": "qc1", "function": {
+                        "name": "query_character",
+                        "arguments": '{"keyword": "芙莉莲"}',
+                    }}
+                ],
+                "response_buffer": response_buf,
+                "group_id": 123,
+                "user_id": 111,
+            },
+            bot,
+        )
+        result = response_buf["results"][0]["result"]
+        assert "text" in result
+        assert "芙莉莲" in result["text"]

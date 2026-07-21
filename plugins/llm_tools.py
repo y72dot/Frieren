@@ -410,6 +410,24 @@ TOOL_DEFS: list[dict[str, Any]] = [
             },
         },
     },
+    # ── 方向五: 角色设定查询 ──
+    {
+        "type": "function",
+        "function": {
+            "name": "query_character",
+            "description": "查询葬送的芙莉莲世界观的人物设定、关系、魔法、历史等背景知识。当你需要了解某个人物、事件、魔法或世界观细节时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {
+                        "type": "string",
+                        "description": "查询关键词：人名(辛美尔/菲伦/海塔/艾泽/赛丽艾...)、章节名(核心准则/过去/魔法/年表...)、魔法名、事件名等",
+                    }
+                },
+                "required": ["keyword"],
+            },
+        },
+    },
 ]
 
 
@@ -757,6 +775,9 @@ async def _execute(
     if name == "think":
         logger.info(f"THINK tool: {args.get('reasoning', '')}")
         return {"acknowledged": True}
+    # ── 方向五: 角色设定查询 ──
+    if name == "query_character":
+        return _query_character(args["keyword"])
     return {"error": f"unknown tool: {name}"}
 
 
@@ -939,6 +960,14 @@ _HELP_TEXTS = {
         ],
         "example": "think(reasoning=\"我需要找出谁发了广告。1. 查询最近消息中的广告关键词 2. 找出违规用户 3. 按规则处理\") — 多步推理前先思考",
     },
+    # ── 方向五: 角色设定查询 ──
+    "query_character": {
+        "desc": "查询人物设定、世界观、关系、魔法、历史等背景知识",
+        "params": [
+            ("keyword", "string", "是", "查询关键词，如人名(辛美尔/菲伦)、魔法名、章节名等"),
+        ],
+        "example": "query_character(keyword=\"辛美尔\") — 查询辛美尔的详细设定\nquery_character(keyword=\"魔法\") — 查询魔法体系介绍",
+    },
 }
 
 
@@ -972,13 +1001,131 @@ _GUIDE_TEXTS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Character lore query (query_character tool)
+# ---------------------------------------------------------------------------
+
+from pathlib import Path  # noqa: E402
+
+# Module-level cache
+_CHARACTER_SECTIONS: dict[str, str] | None = None
+_CHARACTER_FULL_TEXT: str | None = None
+
+
+def _init_character_doc() -> tuple[dict[str, str], str]:
+    """Parse frieren.md into (sections, full_text). Cached after first load."""
+    global _CHARACTER_SECTIONS, _CHARACTER_FULL_TEXT
+
+    if _CHARACTER_SECTIONS is not None:
+        return _CHARACTER_SECTIONS, _CHARACTER_FULL_TEXT
+
+    import re
+
+    # plugins/llm_tools.py -> project_root/config/frieren.md
+    doc_path = Path(__file__).resolve().parent.parent / "config" / "frieren.md"
+
+    if not doc_path.exists():
+        logger.warning(f"Character doc not found: {doc_path}")
+        _CHARACTER_SECTIONS = {}
+        _CHARACTER_FULL_TEXT = ""
+        return _CHARACTER_SECTIONS, _CHARACTER_FULL_TEXT
+
+    text = doc_path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    _CHARACTER_FULL_TEXT = text
+
+    # -- Parse sections by #/## headers --
+    sections: dict[str, str] = {}
+    current_title = "_preamble"
+    current_lines: list[str] = []
+
+    for line in text.split("\n"):
+        m = re.match(r"^#{1,2}\s+(.+)$", line)
+        if m:
+            if current_lines:
+                sections[current_title] = "\n".join(current_lines).strip()
+            current_title = m.group(1).strip()
+            current_lines = [line]
+        else:
+            current_lines.append(line)
+
+    if current_lines:
+        sections[current_title] = "\n".join(current_lines).strip()
+
+    _CHARACTER_SECTIONS = sections
+    logger.info(f"Character doc loaded: {len(sections)} sections, {len(text)} chars from {doc_path}")
+    return sections, text
+
+
+def _query_character(keyword: str) -> dict:
+    """Search frieren.md by keyword. Returns matched section or context window."""
+    sections, full_text = _init_character_doc()
+    if not sections:
+        return {"text": "人物设定文档未找到，请联系管理员配置 frieren.md。"}
+
+    kw = keyword.strip()
+
+    # Phase 1: section title match (e.g. "魔法介绍", "年表", "人物关系")
+    for title, content in sections.items():
+        if kw in title:
+            # If matched section is small, extend to include subsequent content
+            # up to the next level-1 header
+            if content.count("\n") < 3:
+                idx = full_text.find(content)
+                if idx >= 0:
+                    rest = full_text[idx + len(content):]
+                    next_h1 = rest.find("\n# ")
+                    if next_h1 >= 0:
+                        content = full_text[idx:idx + len(content) + next_h1]
+                    else:
+                        content = full_text[idx:]
+            return {"text": _truncate_content(content)}
+
+    # Phase 2: full-text search with context window
+    # Prefer standalone-line matches (character name on its own line)
+    idx = -1
+    lines = full_text.split("\n")
+    char_pos = 0
+    for i, line in enumerate(lines):
+        if line.strip() == kw:
+            idx = char_pos
+            break
+        char_pos += len(line) + 1  # +1 for \n
+
+    # Fall back to first occurrence anywhere
+    if idx == -1:
+        idx = full_text.find(kw)
+
+    if idx == -1:
+        return {"text": f"未找到与 {kw!r} 相关的设定内容。试试查询人名（如辛美尔、菲伦、海塔、赛丽艾）或章节（如魔法、年表、核心准则）。"}
+
+    # Count occurrences
+    count = full_text.count(kw)
+
+    # Extract context around the match: ~300 chars before, ~1200 after
+    ctx_start = max(0, idx - 300)
+    ctx_end = min(len(full_text), idx + len(kw) + 1200)
+    snippet = full_text[ctx_start:ctx_end].strip()
+
+    if count > 1:
+        snippet += f"\n\n（全文共 {count} 处匹配，以上为第一处。可用更具体的关键词精确查询）"
+
+    return {"text": _truncate_content(snippet)}
+
+
+def _truncate_content(text: str, limit: int = 1500) -> str:
+    """Truncate text to ~limit chars, preserving line boundaries."""
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit("\n", 1)[0] + "\n\n...(内容较长已截断，可缩小查询范围或查询子章节)"
+
+
 def _help_all() -> dict:
     lines = ["可用工具一览：\n"]
     lines.append("【查询】get_current_time / query_history / get_group_info / get_member_info / get_member_list / get_essence_list / get_shut_list")
     lines.append("【管理】set_essence / remove_essence / mute_user / kick_user / set_group_card / delete_msg / whole_ban / set_admin")
     lines.append("【互动】send_message / react_emoji(点赞128077,笑哭128514,心10084) / send_poke / send_like")
     lines.append("【感知】ocr_image(仅Windows) / voice_to_text / resolve_forward")
-    lines.append("【辅助】think / tool_help")
+    lines.append("【辅助】think / tool_help / query_character")
     lines.append(f"\n共 {len(_HELP_TEXTS)} 个工具。")
     lines.append("查看某工具详情请用 tool_help(tool_name=\"xxx\")。")
     lines.append("查看工具链式调用指南请用 tool_help(tool_name=\"chain_guide\")。")
