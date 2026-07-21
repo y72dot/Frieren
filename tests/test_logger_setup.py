@@ -17,9 +17,9 @@ class TestSetupLogging:
         # logger.remove() any existing handlers first
         logger.remove()
         setup_logging(level="DEBUG", log_file=str(log_file))
-        # Should have at least stderr + file = 2 sinks
+        # Should have at least stderr + bot.log + llm.log + audit.log = 4 sinks
         handlers = logger._core.handlers
-        assert len(handlers) >= 2
+        assert len(handlers) >= 4
 
     def test_adds_stderr_sink(self, tmp_path):
         log_file = tmp_path / "logs" / "test.log"
@@ -65,7 +65,7 @@ class TestSetupLogging:
         logger.debug("should be filtered")
         # Sinks should have WARNING level
         handlers = logger._core.handlers
-        assert len(handlers) >= 2
+        assert len(handlers) >= 4
 
     def test_custom_rotation_retention_accepted(self, tmp_path):
         log_file = tmp_path / "logs" / "test.log"

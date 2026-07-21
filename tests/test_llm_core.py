@@ -308,10 +308,13 @@ class TestSessionCache:
         await llm_core_handler(payload, bot_with_llm)
         await llm_core_handler(payload, bot_with_llm)
 
-        # Both calls should be fresh 2-message sessions
+        # Both calls should be fresh sessions.
+        # First call: no history in msg_store → 2 messages (system + user)
+        # Second call: first call's message now in msg_store → auto_init injects
+        # assistant tool_call + tool result → 4 messages
         assert len(provider.calls) == 2
         assert len(provider.calls[0]["messages"]) == 2
-        assert len(provider.calls[1]["messages"]) == 2
+        assert len(provider.calls[1]["messages"]) == 4
 
     @pytest.mark.asyncio
     async def test_session_expired_after_ttl(self, bot_with_llm, monkeypatch):
@@ -355,10 +358,12 @@ class TestSessionCache:
         # Backdate the cache entry to simulate expiry
         _session_cache["group:123"] = (0, _session_cache["group:123"][1])
 
-        # Second call: should see expired entry and start fresh
+        # Second call: should see expired entry and start fresh.
+        # First call's message is now in msg_store, so auto_init injects
+        # assistant tool_call + tool result → 4 messages
         await llm_core_handler(payload, bot_with_llm)
         assert len(provider.calls) == 2
-        assert len(provider.calls[1]["messages"]) == 2  # fresh session
+        assert len(provider.calls[1]["messages"]) == 4
 
 
 # ---------------------------------------------------------------------------

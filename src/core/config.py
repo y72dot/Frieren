@@ -72,6 +72,7 @@ class LoggingConfigSection:
     file: str = "logs/bot.log"
     rotation: str = "10 MB"
     retention: str = "14 days"
+    json_format: bool = False
 
 
 @dataclass
@@ -395,6 +396,7 @@ def _parse_logging_section(data: dict[str, Any]) -> LoggingConfigSection:
         file=str(data.get("file", "logs/bot.log")),
         rotation=str(data.get("rotation", "10 MB")),
         retention=str(data.get("retention", "14 days")),
+        json_format=bool(data.get("json_format", False)),
     )
 
 

@@ -64,6 +64,7 @@ class LlmSessionLogger:
         self._start_time = time.time()
         self._last_msg_count = 0
         self._current_turn = 0
+        self._tool_call_count = 0
 
     # -- public API ----------------------------------------------------------
 
@@ -139,6 +140,7 @@ class LlmSessionLogger:
         self._log.info(f"  [TEXT   ] {preview}")
 
     def tool_calls_result(self, tool_calls: list) -> None:
+        self._tool_call_count += len(tool_calls)
         self._log.info(f"RES tool_calls={len(tool_calls)}")
         for tc in tool_calls:
             if isinstance(tc, dict):
@@ -170,4 +172,18 @@ class LlmSessionLogger:
     def session_end(self, turns: int) -> None:
         elapsed = time.time() - self._start_time
         self._log.info(f"==== SESSION END {turns} turns, {elapsed:.2f}s ====")
+
+        # Emit a summary line to bot.log for cross-file correlation
+        logger.info(
+            f"LLM session summary: session={self._session_key} "
+            f"turns={turns} tool_calls={self._tool_call_count} elapsed={elapsed:.1f}s"
+        )
+
+        # Remove the sink for this session to prevent memory leak
+        sid = self._sinks.pop(self._session_key, None)
+        if sid is not None:
+            try:
+                logger.remove(sid)
+            except ValueError:
+                pass
 

@@ -83,6 +83,7 @@ class Bot:
             log_file=cfg.logging.file,
             rotation=cfg.logging.rotation,
             retention=cfg.logging.retention,
+            json_format=cfg.logging.json_format,
         )
 
         logger.info("Bot starting …")

@@ -35,6 +35,7 @@ class AgentResult:
     turns: int = 0
     tripped: bool = False
     error: str = ""
+    tool_call_count: int = 0
 
 
 class AgentLoop:
@@ -82,6 +83,7 @@ class AgentLoop:
 
         max_turns = self.config.max_turns
         turn = 0
+        tool_call_count = 0
 
         for turn in range(1, max_turns + 1):
             logger.debug(f"LLM turn {turn}/{max_turns}")
@@ -104,6 +106,7 @@ class AgentLoop:
                     final_text="抱歉，我遇到了一些问题，请稍后再试。",
                     turns=turn,
                     error=str(exc),
+                    tool_call_count=tool_call_count,
                 )
 
             # -- text response: conversation complete --
@@ -114,10 +117,11 @@ class AgentLoop:
                     await self._emit_send(bot, ctx, reply)
                     session_log.final_text(reply)
                 logger.info(f"LLM final reply: session={session.session_key} len={len(reply)} chars")
-                return AgentResult(final_text=reply, turns=turn)
+                return AgentResult(final_text=reply, turns=turn, tool_call_count=tool_call_count)
 
             # -- tool calls: execute and continue --
             session_log.tool_calls_result(response.tool_calls)
+            tool_call_count += len(response.tool_calls)
             assistant_tool_msg = _make_assistant_tool_msg(response.tool_calls)
             session.messages.append(assistant_tool_msg)
 
@@ -164,6 +168,7 @@ class AgentLoop:
                             final_text="抱歉，我遇到了一些问题，请稍后再试。",
                             turns=turn,
                             tripped=True,
+                            tool_call_count=tool_call_count,
                         )
 
             # Circuit breaker: check for repeated identical tool calls
@@ -174,6 +179,7 @@ class AgentLoop:
                         final_text="抱歉，我似乎陷入了循环，请重新描述你的需求。",
                         turns=turn,
                         tripped=True,
+                        tool_call_count=tool_call_count,
                     )
 
         # -- Max turns reached: force final text reply --
@@ -196,7 +202,7 @@ class AgentLoop:
             session_log.final_text(reply)
             logger.info(f"LLM final reply: session={session.session_key} len={len(reply)} chars")
 
-        return AgentResult(final_text=reply, turns=turn, tripped=True)
+        return AgentResult(final_text=reply, turns=turn, tripped=True, tool_call_count=tool_call_count)
 
     # ------------------------------------------------------------------
     # helpers

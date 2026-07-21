@@ -148,13 +148,15 @@ class TestMultiTurnScenarios:
             group_id=456, message="Fresh session reply.",
         )
         # Session should be updated with fresh timestamp, and it's a NEW session
-        # (old session was expired so messages[1] should NOT be "old msg")
+        # (old session was expired so old msg should NOT be present)
+        # New session now has: system + auto_init tool_call + auto_init result + user
         session = e2e_llm_bot.session_mgr._cache["group:456"]
         messages = session.messages
-        # New session has system + single user message (not accumulated from old)
-        assert messages[1]["role"] == "user"
-        assert messages[1]["content"] != "old msg"
-        assert "New message" in messages[1]["content"]
+        # User message is at index 3 (after system + auto_init tool_call + tool result)
+        assert len(messages) == 4
+        assert messages[1]["role"] == "assistant"  # synthetic tool_call
+        assert messages[3]["role"] == "user"
+        assert "New message" in messages[3]["content"]
 
     @pytest.mark.llm
     @pytest.mark.asyncio

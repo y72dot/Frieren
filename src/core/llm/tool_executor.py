@@ -6,7 +6,6 @@ import asyncio
 import hashlib
 import json
 import time as _time
-from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -14,6 +13,8 @@ from loguru import logger
 from src.core.llm.sandbox import RiskLevel
 from src.core.llm.tool_catalog import ToolCatalog, ToolDef
 from src.core.llm.tool_permissions import ToolCallContext, check_permission
+
+_audit_log = logger.bind(__log_channel="_audit")
 
 
 class ToolExecutor:
@@ -23,11 +24,9 @@ class ToolExecutor:
         self,
         catalog: ToolCatalog,
         default_timeout: float = 30.0,
-        audit_log_path: str = "logs/audit.log",
     ) -> None:
         self.catalog = catalog
         self.default_timeout = default_timeout
-        self.audit_log_path = Path(audit_log_path)
         self._result_cache: dict[str, tuple[float, Any]] = {}
 
     # ------------------------------------------------------------------
@@ -119,9 +118,8 @@ class ToolExecutor:
         ctx: ToolCallContext,
         result: Any,
     ) -> None:
-        """Append a destructive-tool record to the audit log."""
+        """Log a destructive-tool record to the audit log."""
         try:
-            self.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
             entry = {
                 "timestamp": _time.time(),
                 "tool": tool_name,
@@ -130,8 +128,7 @@ class ToolExecutor:
                 "group_id": ctx.group_id,
                 "result_summary": str(result)[:200],
             }
-            with open(self.audit_log_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            _audit_log.info(json.dumps(entry, ensure_ascii=False))
         except Exception:
             logger.opt(exception=True).warning("Failed to write audit log entry")
 
