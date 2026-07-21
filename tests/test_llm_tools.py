@@ -1056,7 +1056,7 @@ class TestToolHelp:
             bot,
         )
         text = response_buf["results"][0]["result"]["text"]
-        assert "共 25 个工具" in text
+        assert "共 30 个工具" in text
 
 
 # ====================================================================

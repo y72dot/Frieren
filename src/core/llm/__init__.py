@@ -27,6 +27,9 @@ from src.core.llm.memory_manager import MemoryConfig, MemoryManager
 # Phase 5: skills
 from src.core.llm.skill_manager import SkillDef, SkillManager, SkillsConfig
 
+# Phase 6: sandbox
+from src.core.llm.sandbox_manager import SandboxConfig, SandboxManager
+
 __all__ = [
     # provider
     "LlmProvider",
@@ -60,4 +63,7 @@ __all__ = [
     "SkillDef",
     "SkillManager",
     "SkillsConfig",
+    # sandbox
+    "SandboxConfig",
+    "SandboxManager",
 ]

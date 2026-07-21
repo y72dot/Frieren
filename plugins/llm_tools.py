@@ -911,6 +911,44 @@ _HELP_TEXTS = {
         ],
         "example": "query_character(keyword=\"辛美尔\") — 查询辛美尔的详细设定\nquery_character(keyword=\"魔法\") — 查询魔法体系介绍",
     },
+    # -- sandbox tools --
+    "sandbox_exec": {
+        "desc": "在沙箱Linux容器中执行任意命令（Python、Shell等），可运行代码、安装pip包",
+        "params": [
+            ("command", "string", "是", "要执行的shell命令，如 'python script.py' 或 'pip install requests'"),
+            ("timeout", "integer", "否", "超时秒数，默认30，最大60"),
+        ],
+        "example": "sandbox_exec(command=\"python -c 'print(1+1)'\") — 执行Python代码\nsandbox_exec(command=\"pip install numpy && python calc.py\") — 安装依赖并运行脚本",
+    },
+    "sandbox_write": {
+        "desc": "将UTF-8文本写入沙箱 /workspace 目录，自动创建父目录，单文件限制1MB",
+        "params": [
+            ("path", "string", "是", "相对于 /workspace 的文件路径，如 'script.py'"),
+            ("content", "string", "是", "UTF-8 文本内容"),
+        ],
+        "example": "sandbox_write(path=\"hello.py\", content=\"print('hello')\") — 写入Python脚本",
+    },
+    "sandbox_read": {
+        "desc": "从沙箱读取文件内容，限制500KB",
+        "params": [
+            ("path", "string", "是", "相对于 /workspace 的文件路径，如 'output.txt'"),
+        ],
+        "example": "sandbox_read(path=\"result.csv\") — 读取结果文件",
+    },
+    "sandbox_list": {
+        "desc": "列出沙箱 /workspace 目录下的文件",
+        "params": [
+            ("path", "string", "否", "子目录路径，默认 '' 即根目录"),
+        ],
+        "example": "sandbox_list() — 列出 workspace 根目录\nsandbox_list(path=\"data\") — 列出 data 子目录",
+    },
+    "sandbox_delete": {
+        "desc": "删除沙箱中的文件/目录（DESTRUCTIVE，仅管理员）",
+        "params": [
+            ("path", "string", "是", "相对于 /workspace 的路径"),
+        ],
+        "example": "sandbox_delete(path=\"temp/old.txt\") — 删除临时文件",
+    },
 }
 
 
@@ -1068,6 +1106,7 @@ def _help_all() -> dict:
     lines.append("【管理】set_essence / remove_essence / mute_user / kick_user / set_group_card / delete_msg / whole_ban / set_admin")
     lines.append("【互动】send_message / react_emoji(点赞128077,笑哭128514,心10084) / send_poke / send_like")
     lines.append("【感知】ocr_image(仅Windows) / voice_to_text / resolve_forward")
+    lines.append("【沙箱】sandbox_exec / sandbox_write / sandbox_read / sandbox_list / sandbox_delete")
     lines.append("【辅助】think / tool_help / query_character")
     lines.append(f"\n共 {len(_HELP_TEXTS)} 个工具。")
     lines.append("查看某工具详情请用 tool_help(tool_name=\"xxx\")。")

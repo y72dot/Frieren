@@ -45,6 +45,7 @@ services:
       - PYTHONPATH=/app
     volumes:
       - ./instances/frieren:/config
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - bot-network
     healthcheck:
@@ -53,6 +54,34 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # ------------------------------------------------------------------
+  # Sandbox — agent's Linux playground
+  # ------------------------------------------------------------------
+  sandbox:
+    image: python:3.12-slim
+    container_name: qqbot-sandbox
+    restart: unless-stopped
+    working_dir: /workspace
+    environment:
+      - HOME=/workspace
+      - PIP_NO_CACHE_DIR=1
+    volumes:
+      - sandbox-workspace:/workspace
+    tmpfs:
+      - /tmp:exec,size=16m
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    network_mode: none
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+
+volumes:
+  sandbox-workspace:
 
 networks:
   bot-network:

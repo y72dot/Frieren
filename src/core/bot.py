@@ -42,6 +42,7 @@ class Bot:
         self.agent_loop = None
         self.memory_mgr = None
         self.skill_mgr = None
+        self.sandbox = None
         self._running = False
         self._main_task: asyncio.Task[None] | None = None
 
@@ -286,6 +287,7 @@ class Bot:
         from src.core.llm.circuit_breaker import CircuitBreaker
         from src.core.llm.memory_manager import MemoryConfig, MemoryManager
         from src.core.llm.skill_manager import SkillManager, SkillsConfig
+        from src.core.llm.sandbox_manager import SandboxConfig as _SandboxConfig, SandboxManager
         from plugins.llm_tools import _catalog, _executor
 
         # Session manager
@@ -327,6 +329,27 @@ class Bot:
         )
         self.skill_mgr = SkillManager(catalog=_catalog, config=skills_config)
         self.skill_mgr.discover(self)
+
+        # Sandbox manager
+        if cfg.llm.sandbox.enabled:
+            sandbox_config = _SandboxConfig(
+                enabled=cfg.llm.sandbox.enabled,
+                container_name=cfg.llm.sandbox.container_name,
+                workspace=cfg.llm.sandbox.workspace,
+                max_file_size=cfg.llm.sandbox.max_file_size,
+                max_read_size=cfg.llm.sandbox.max_read_size,
+                exec_timeout=cfg.llm.sandbox.exec_timeout,
+                max_exec_timeout=cfg.llm.sandbox.max_exec_timeout,
+                stdout_limit=cfg.llm.sandbox.stdout_limit,
+            )
+            self.sandbox = SandboxManager(sandbox_config)
+            self.sandbox.init_client()
+            from plugins.llm_sandbox_tools import register_sandbox_tools
+            register_sandbox_tools(_catalog)
+            logger.info(f"Sandbox manager initialized (container: {sandbox_config.container_name})")
+        else:
+            self.sandbox = None
+            logger.info("Sandbox disabled via config")
 
         self._agent_initialized = True
         logger.info("LLM agent subsystems initialized")

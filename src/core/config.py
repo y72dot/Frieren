@@ -139,6 +139,18 @@ class LLMSkillsConfig:
 
 
 @dataclass
+class SandboxConfig:
+    container_name: str = "qqbot-sandbox"
+    workspace: str = "/workspace"
+    max_file_size: int = 1_048_576
+    max_read_size: int = 524_288
+    exec_timeout: int = 30
+    max_exec_timeout: int = 60
+    stdout_limit: int = 102_400
+    enabled: bool = True
+
+
+@dataclass
 class LLMConfig:
     enabled: bool = False
     api_base: str = "https://api.openai.com/v1"
@@ -166,6 +178,7 @@ class LLMConfig:
     session: LLMSessionConfig = field(default_factory=LLMSessionConfig)
     memory: LLMMemoryConfig = field(default_factory=LLMMemoryConfig)
     skills: LLMSkillsConfig = field(default_factory=LLMSkillsConfig)
+    sandbox: SandboxConfig = field(default_factory=SandboxConfig)
 
 
 @dataclass
@@ -318,6 +331,7 @@ def _parse_llm_section(data: dict[str, Any]) -> LLMConfig:
     session_raw = data.get("session", {})
     memory_raw = data.get("memory", {})
     skills_raw = data.get("skills", {})
+    sandbox_raw = data.get("sandbox", {})
 
     return LLMConfig(
         enabled=bool(data.get("enabled", False)),
@@ -386,6 +400,16 @@ def _parse_llm_section(data: dict[str, Any]) -> LLMConfig:
             enabled=bool(skills_raw.get("enabled", True)),
             skills_dir=str(skills_raw.get("skills_dir", "config/skills")),
             auto_reload=bool(skills_raw.get("auto_reload", True)),
+        ),
+        sandbox=SandboxConfig(
+            enabled=bool(sandbox_raw.get("enabled", True)),
+            container_name=str(sandbox_raw.get("container_name", "qqbot-sandbox")),
+            workspace=str(sandbox_raw.get("workspace", "/workspace")),
+            max_file_size=int(sandbox_raw.get("max_file_size", 1_048_576)),
+            max_read_size=int(sandbox_raw.get("max_read_size", 524_288)),
+            exec_timeout=int(sandbox_raw.get("exec_timeout", 30)),
+            max_exec_timeout=int(sandbox_raw.get("max_exec_timeout", 60)),
+            stdout_limit=int(sandbox_raw.get("stdout_limit", 102_400)),
         ),
     )
 
