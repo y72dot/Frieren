@@ -34,7 +34,7 @@ from tests.conftest_e2e import (
 
 
 async def _run_tool(bot, tool_calls: list[ToolCall], group_id=456, user_id=111):
-    from plugins.llm_tools import llm_tools_handler
+    from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
     buf: dict = {}
     await llm_tools_handler(

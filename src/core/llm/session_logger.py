@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json as _json
 import time
+from contextlib import suppress
 from pathlib import Path
 
 from loguru import logger
@@ -131,6 +132,13 @@ class LlmSessionLogger:
 
         self._last_msg_count = len(messages)
 
+    def tool_view(self, names: tuple[str, ...], packs: tuple[str, ...]) -> None:
+        """Record the exact per-turn tools exposed to the model."""
+        self._log.info(
+            f"TOOLS count={len(names)} packs={','.join(packs)} "
+            f"names={','.join(names)}"
+        )
+
     def text_response(self, text: str) -> None:
         if not text.strip():
             self._log.info("RES text=(empty)")
@@ -152,10 +160,8 @@ class LlmSessionLogger:
                 name = tc.name
                 args = tc.arguments
             if isinstance(args, str):
-                try:
+                with suppress(_json.JSONDecodeError, TypeError):
                     args = _json.loads(args)
-                except (_json.JSONDecodeError, TypeError):
-                    pass
             self._log.info(f"  TCALL {_short_id(call_id)} {name}{_fmt_args(args)}")
 
     def tool_result(self, call_id: str, name: str, result: str) -> None:
@@ -182,8 +188,5 @@ class LlmSessionLogger:
         # Remove the sink for this session to prevent memory leak
         sid = self._sinks.pop(self._session_key, None)
         if sid is not None:
-            try:
+            with suppress(ValueError):
                 logger.remove(sid)
-            except ValueError:
-                pass
-

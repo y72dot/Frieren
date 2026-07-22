@@ -29,6 +29,11 @@ class ToolDef:
     idempotency: str = "none"  # none | keyed
     approval: str = "none"  # none | required
     provider: str = "builtin"
+    contexts: set[str] = field(default_factory=lambda: {"group", "private", "scheduled"})
+    audiences: set[str] = field(default_factory=lambda: {"user", "admin"})
+    packs: set[str] = field(default_factory=lambda: {"core"})
+    intents: set[str] = field(default_factory=set)
+    default_enabled: bool = True
 
     def to_openai_schema(self) -> dict[str, Any]:
         """Return the OpenAI function-calling schema dict for this tool."""

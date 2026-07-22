@@ -222,7 +222,6 @@ class TestLLMPipelineIntegration:
         """LLM trigger INTERNAL message flows through gate→core→sender chain."""
         from plugins.llm_core import _lazy_init, llm_core_handler
         from plugins.llm_sender import llm_sender_handler
-        from plugins.llm_tools import llm_tools_handler
         from src.core.llm import LlmResponse
         from src.core.message_bus import MessageType
         from src.plugin.manager import _SubscribeAdapter
@@ -234,18 +233,13 @@ class TestLLMPipelineIntegration:
         provider = bot_with_llm.llm_provider
         provider.responses = [LlmResponse(text="Test reply")]
 
-        # Register sender and tools on the bus
+        # Register the final response sender on the bus. Tools execute directly
+        # through AgentLoop -> ToolExecutor.
         bot_with_llm.message_bus.subscribe(
             MessageType.INTERNAL,
             _SubscribeAdapter(llm_sender_handler, "llm_sender", 40),
             40,
         )
-        bot_with_llm.message_bus.subscribe(
-            MessageType.INTERNAL,
-            _SubscribeAdapter(llm_tools_handler, "llm_tools", 30),
-            30,
-        )
-
         # Dispatch a trigger
         result = await llm_core_handler(
             {

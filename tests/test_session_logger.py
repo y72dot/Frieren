@@ -153,6 +153,18 @@ class TestRequestLogging:
         assert "Hi there!" in content
         assert "前" not in content
 
+    def test_tool_view_records_names_and_packs(self, monkeypatch, tmp_path: Path):
+        monkeypatch.chdir(tmp_path)
+        key = _unique_key()
+        session = LlmSessionLogger(key)
+
+        session.tool_view(("query_history", "get_group_info"), ("core", "group_core"))
+        logger.complete()
+
+        content = session._file_path.read_text(encoding="utf-8")
+        assert "TOOLS count=2 packs=core,group_core" in content
+        assert "names=query_history,get_group_info" in content
+
     def test_request_second_turn_skips_old(self, monkeypatch, tmp_path: Path):
         monkeypatch.chdir(tmp_path)
         key = _unique_key()

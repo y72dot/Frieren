@@ -43,6 +43,14 @@ def check_permission(tool: ToolDef, ctx: ToolCallContext) -> tuple[bool, str]:
     ):
         return False, f"tool {tool.name} requires approval"
 
+    conversation_context = "group" if ctx.group_id is not None else "private"
+    if conversation_context not in tool.contexts:
+        return False, f"tool {tool.name} is unavailable in {conversation_context} context"
+
+    audience = "admin" if ctx.user_is_admin else "user"
+    if audience not in tool.audiences:
+        return False, f"tool {tool.name} is unavailable for {audience} audience"
+
     # Admin users bypass role and capability gates after explicit approval.
     if ctx.user_is_admin:
         return True, "admin"

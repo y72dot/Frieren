@@ -32,21 +32,13 @@ class TestToolDefs:
         assert len(names) == len(set(names))
 
 
-class TestLlmToolsHandler:
-    @pytest.mark.asyncio
-    async def test_no_match(self, bot):
-        """Returns False for non-tool llm_type payloads."""
-        from plugins.llm_tools import llm_tools_handler
-
-        result = await llm_tools_handler({"llm_type": "other"}, bot)
-        assert result is False
-
+class TestToolExecutorCalls:
     @pytest.mark.asyncio
     async def test_execute_get_current_time(self, bot):
         """get_current_time returns datetime string."""
         import re
 
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         tc = ToolCall(id="call_0", name="get_current_time", arguments={})
         response_buf: dict = {}
@@ -71,7 +63,7 @@ class TestLlmToolsHandler:
     @pytest.mark.asyncio
     async def test_execute_set_essence(self, bot):
         """set_essence tool calls bot.api.set_essence_msg."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         tc = ToolCall(id="call_1", name="set_essence", arguments={"message_id": 42})
         response_buf: dict = {}
@@ -101,7 +93,7 @@ class TestLlmToolsHandler:
     @pytest.mark.asyncio
     async def test_execute_send_message_group(self, bot):
         """send_message tool sends to group."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         tc = ToolCall(
             id="call_2", name="send_message", arguments={"text": "hello group"}
@@ -128,7 +120,7 @@ class TestLlmToolsHandler:
     @pytest.mark.asyncio
     async def test_execute_send_message_private(self, bot):
         """send_message tool sends to private chat when no group_id."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         tc = ToolCall(
             id="call_3", name="send_message", arguments={"text": "hello private"}
@@ -154,7 +146,7 @@ class TestLlmToolsHandler:
     @pytest.mark.asyncio
     async def test_execute_mute_user(self, bot):
         """mute_user tool calls bot.api.set_group_ban."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         tc = ToolCall(
             id="call_4", name="mute_user", arguments={"user_id": 555, "duration": 600}
@@ -181,7 +173,7 @@ class TestLlmToolsHandler:
     @pytest.mark.asyncio
     async def test_execute_kick_user(self, bot):
         """kick_user tool calls bot.api.set_group_kick."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         tc = ToolCall(
             id="call_5", name="kick_user", arguments={"user_id": 777}
@@ -207,7 +199,7 @@ class TestLlmToolsHandler:
     @pytest.mark.asyncio
     async def test_execute_multiple_tools(self, bot):
         """Multiple tool calls in one dispatch are all executed."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         tc1 = ToolCall(
             id="call_a", name="set_essence", arguments={"message_id": 1}
@@ -238,7 +230,7 @@ class TestLlmToolsHandler:
     @pytest.mark.asyncio
     async def test_unknown_tool(self, bot):
         """Unknown tool returns error."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         tc = ToolCall(
             id="call_err", name="nonexistent_tool", arguments={}
@@ -264,7 +256,7 @@ class TestLlmToolsHandler:
     @pytest.mark.asyncio
     async def test_tool_execution_error(self, bot):
         """Tool execution exceptions are caught and returned as errors."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         tc = ToolCall(
             id="call_err",
@@ -299,7 +291,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_recent_group_messages(self, bot):
         """query_history without args returns recent group messages with timestamps."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         # Insert test messages
         bot.msg_store.record_bot_message(1, 123, 100, "Alice", "hello", 1000, True)
@@ -331,7 +323,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_with_keyword(self, bot):
         """query_history with keyword filters by search."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot.msg_store.record_bot_message(1, 123, 100, "Alice", "hello", 1000, True)
         bot.msg_store.record_bot_message(2, 123, 200, "Bob", "goodbye", 1001, True)
@@ -357,7 +349,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_by_user(self, bot):
         """query_history with user_id filters by user."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot.msg_store.record_bot_message(1, 123, 100, "Alice", "msg1", 1000, True)
         bot.msg_store.record_bot_message(2, 123, 200, "Bob", "msg2", 1001, True)
@@ -383,7 +375,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_private_messages(self, bot):
         """query_history in private chat returns private messages."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot.msg_store.record_bot_message(1, None, 999, "User", "private msg", 1000, False)
 
@@ -407,7 +399,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_no_results(self, bot):
         """query_history with no matching messages returns提示."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -429,7 +421,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_respects_limit(self, bot):
         """query_history limit clamps at 50."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -452,7 +444,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_excludes_bot_messages(self, bot):
         """query_history bot_scope=exclude excludes bot's own messages."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot_qq = bot.config.bot.qq
         bot.msg_store.record_bot_message(1, 123, bot_qq, "Bot", "bot msg", 1000, True)
@@ -479,7 +471,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_bot_scope_include(self, bot):
         """bot_scope=include returns bot messages alongside user messages."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot_qq = bot.config.bot.qq
         bot.msg_store.record_bot_message(1, 123, bot_qq, "Bot", "bot msg", 1000, True)
@@ -506,7 +498,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_bot_scope_only(self, bot):
         """bot_scope=only returns only bot messages."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot_qq = bot.config.bot.qq
         bot.msg_store.record_bot_message(1, 123, bot_qq, "Bot", "bot msg", 1000, True)
@@ -533,7 +525,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_bot_scope_only_conflict(self, bot):
         """bot_scope=only + other user_id returns error."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -555,7 +547,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_keyword_and_user_id_combo(self, bot):
         """query_history with keyword+user_id uses AND semantics."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot.msg_store.record_bot_message(1, 123, 100, "Alice", "hello", 1000, True)
         bot.msg_store.record_bot_message(2, 123, 200, "Bob", "hello", 1001, True)
@@ -583,7 +575,7 @@ class TestQueryHistory:
         """query_history with time_after filters messages."""
         from datetime import datetime
 
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot.msg_store.record_bot_message(1, 123, 100, "Alice", "old", 1000, True)
         bot.msg_store.record_bot_message(2, 123, 200, "Bob", "new", 2000, True)
@@ -619,7 +611,7 @@ class TestQueryHistory:
         """query_history with time_before filters messages."""
         from datetime import datetime
 
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot.msg_store.record_bot_message(1, 123, 100, "Alice", "old", 1000, True)
         bot.msg_store.record_bot_message(2, 123, 200, "Bob", "new", 2000, True)
@@ -652,7 +644,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_private_with_keyword(self, bot):
         """query_history in private chat supports keyword."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot.msg_store.record_bot_message(1, None, 999, "User", "hello world", 1000, False)
         bot.msg_store.record_bot_message(2, None, 999, "User", "goodbye", 1001, False)
@@ -680,7 +672,7 @@ class TestQueryHistory:
         """query_history in private chat supports time_after."""
         from datetime import datetime
 
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot.msg_store.record_bot_message(1, None, 999, "User", "old", 1000, False)
         bot.msg_store.record_bot_message(2, None, 999, "User", "new", 2000, False)
@@ -713,7 +705,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_by_message_id(self, bot):
         """query_history with message_id returns the exact message."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot.msg_store.record_bot_message(1, 123, 100, "Alice", "first", 1000, True)
         bot.msg_store.record_bot_message(2, 123, 200, "Bob", "second", 1001, True)
@@ -739,7 +731,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_message_id_and_keyword(self, bot):
         """query_history with message_id + keyword uses AND semantics."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot.msg_store.record_bot_message(1, 123, 100, "Alice", "hello", 1000, True)
         bot.msg_store.record_bot_message(2, 123, 200, "Bob", "hello", 1001, True)
@@ -784,7 +776,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_by_message_id_fallback(self, bot):
         """query_history falls back to get_msg when message_id not in local store."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot.api.get_msg_response = {
             "data": {
@@ -819,7 +811,7 @@ class TestQueryHistory:
     @pytest.mark.asyncio
     async def test_query_default_include_bot_messages(self, bot):
         """query_history no-arg default (bot_scope=include) returns bot messages."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         bot_qq = bot.config.bot.qq
         bot.msg_store.record_bot_message(1, 123, bot_qq, "Bot", "bot msg", 1000, True)
@@ -848,7 +840,7 @@ class TestQueryHistory:
         """query_history no-arg uses default limit=30 without exclude_user_ids."""
         from unittest.mock import patch
 
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         with patch.object(bot.msg_store, "query", wraps=bot.msg_store.query) as mock_query:
@@ -874,7 +866,7 @@ class TestQueryHistory:
         """query_history with explicit limit is clamped at 50."""
         from unittest.mock import patch
 
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         with patch.object(bot.msg_store, "query", wraps=bot.msg_store.query) as mock_query:
@@ -898,7 +890,7 @@ class TestToolHelp:
     @pytest.mark.asyncio
     async def test_help_all(self, bot):
         """tool_help without args returns overview of all tools."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -923,7 +915,7 @@ class TestToolHelp:
     @pytest.mark.asyncio
     async def test_help_single(self, bot):
         """tool_help with tool_name returns single tool details."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -947,7 +939,7 @@ class TestToolHelp:
     @pytest.mark.asyncio
     async def test_help_unknown_tool(self, bot):
         """tool_help with unknown tool_name returns error with suggestions."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -980,7 +972,7 @@ class TestToolHelp:
     @pytest.mark.asyncio
     async def test_help_all_includes_new_tools(self, bot):
         """tool_help --all lists new tools from four directions."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1017,7 +1009,7 @@ class TestToolHelp:
     @pytest.mark.asyncio
     async def test_help_single_new_tool(self, bot):
         """tool_help with a new tool name shows its details."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1040,7 +1032,7 @@ class TestToolHelp:
     @pytest.mark.asyncio
     async def test_help_total_count(self, bot):
         """tool_help --all shows correct total tool count."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1068,7 +1060,7 @@ class TestGetGroupInfo:
     @pytest.mark.asyncio
     async def test_basic(self, bot):
         """get_group_info returns key group fields."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         async def fake_get_group_info(group_id):
             bot.api.calls.append({"method": "get_group_info", "group_id": group_id})
@@ -1105,7 +1097,7 @@ class TestGetGroupInfo:
     @pytest.mark.asyncio
     async def test_empty_data(self, bot):
         """get_group_info with empty response returns raw data as JSON."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         async def fake_get_group_info(group_id):
             bot.api.calls.append({"method": "get_group_info", "group_id": group_id})
@@ -1132,7 +1124,7 @@ class TestGetMemberInfo:
     @pytest.mark.asyncio
     async def test_basic(self, bot):
         """get_member_info returns identity fields for a member."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         async def fake_get_member_info(group_id, user_id):
             bot.api.calls.append(
@@ -1170,7 +1162,7 @@ class TestGetMemberInfo:
     @pytest.mark.asyncio
     async def test_empty_data(self, bot):
         """get_member_info with empty response still returns valid JSON."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         async def fake_get_member_info(group_id, user_id):
             bot.api.calls.append(
@@ -1199,7 +1191,7 @@ class TestGetMemberList:
     @pytest.mark.asyncio
     async def test_list_format(self, bot):
         """get_member_list returns formatted member list with role tags."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         async def fake_get_member_list(group_id):
             bot.api.calls.append({"method": "get_group_member_list", "group_id": group_id})
@@ -1235,7 +1227,7 @@ class TestGetMemberList:
     @pytest.mark.asyncio
     async def test_empty(self, bot):
         """get_member_list with empty data shows 0 members."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         async def fake_get_member_list(group_id):
             bot.api.calls.append({"method": "get_group_member_list", "group_id": group_id})
@@ -1261,7 +1253,7 @@ class TestGetMemberList:
     @pytest.mark.asyncio
     async def test_dict_with_members_key(self, bot):
         """get_member_list handles response with members key."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         async def fake_get_member_list(group_id):
             bot.api.calls.append({"method": "get_group_member_list", "group_id": group_id})
@@ -1287,7 +1279,7 @@ class TestGetMemberList:
     @pytest.mark.asyncio
     async def test_truncation_100(self, bot):
         """get_member_list truncates at 100 members."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         members = [
             {"user_id": i, "nickname": f"User{i}", "card": "", "role": "member"}
@@ -1325,7 +1317,7 @@ class TestGetEssenceList:
     @pytest.mark.asyncio
     async def test_with_data(self, bot):
         """get_essence_list returns formatted essence messages."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         async def fake_call_action(action, **params):
             bot.api.calls.append({"method": "call_action", "action": action, "params": params})
@@ -1371,7 +1363,7 @@ class TestGetEssenceList:
     @pytest.mark.asyncio
     async def test_empty(self, bot):
         """get_essence_list with empty data returns提示."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         async def fake_call_action(action, **params):
             bot.api.calls.append({"method": "call_action", "action": action, "params": params})
@@ -1397,7 +1389,7 @@ class TestGetEssenceList:
     @pytest.mark.asyncio
     async def test_truncation_20(self, bot):
         """get_essence_list truncates at 20 entries."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         essences = [
             {"message_id": i, "sender_nick": f"User{i}", "content": f"msg{i}"}
@@ -1432,7 +1424,7 @@ class TestGetEssenceList:
     @pytest.mark.asyncio
     async def test_dict_list_content(self, bot):
         """get_essence_list handles list-type message content."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         async def fake_call_action(action, **params):
             bot.api.calls.append({"method": "call_action", "action": action, "params": params})
@@ -1473,7 +1465,7 @@ class TestGetShutList:
     @pytest.mark.asyncio
     async def test_with_data(self, bot):
         """get_shut_list returns formatted shut-up list."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         async def fake_call_action(action, **params):
             bot.api.calls.append({"method": "call_action", "action": action, "params": params})
@@ -1509,7 +1501,7 @@ class TestGetShutList:
     @pytest.mark.asyncio
     async def test_empty(self, bot):
         """get_shut_list with empty data returns提示."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         async def fake_call_action(action, **params):
             bot.api.calls.append({"method": "call_action", "action": action, "params": params})
@@ -1542,7 +1534,7 @@ class TestSetGroupCard:
     @pytest.mark.asyncio
     async def test_basic(self, bot):
         """set_group_card calls call_action with correct params."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1570,7 +1562,7 @@ class TestSetGroupCard:
     @pytest.mark.asyncio
     async def test_empty_card(self, bot):
         """set_group_card with empty card string clears the card."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1593,7 +1585,7 @@ class TestDeleteMsg:
     @pytest.mark.asyncio
     async def test_basic(self, bot):
         """delete_msg calls call_action with delete_msg action."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1618,7 +1610,7 @@ class TestWholeBan:
     @pytest.mark.asyncio
     async def test_enable(self, bot):
         """whole_ban enable=true calls set_group_whole_ban."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1641,7 +1633,7 @@ class TestWholeBan:
     @pytest.mark.asyncio
     async def test_disable(self, bot):
         """whole_ban enable=false calls set_group_whole_ban with enable=False."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1662,7 +1654,7 @@ class TestWholeBan:
     @pytest.mark.asyncio
     async def test_default_enable(self, bot):
         """whole_ban without enable defaults to True."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1685,7 +1677,7 @@ class TestSetAdmin:
     @pytest.mark.asyncio
     async def test_set_admin(self, bot):
         """set_admin enable=true calls set_group_admin."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1709,7 +1701,7 @@ class TestSetAdmin:
     @pytest.mark.asyncio
     async def test_unset_admin(self, bot):
         """set_admin enable=false unsets admin."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1730,7 +1722,7 @@ class TestSetAdmin:
     @pytest.mark.asyncio
     async def test_default_enable(self, bot):
         """set_admin without enable defaults to True."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1758,7 +1750,7 @@ class TestSendPoke:
     @pytest.mark.asyncio
     async def test_basic(self, bot):
         """send_poke calls bot.api.send_group_poke."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1783,7 +1775,7 @@ class TestSendLike:
     @pytest.mark.asyncio
     async def test_basic(self, bot):
         """send_like with explicit times calls call_action."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1793,7 +1785,7 @@ class TestSendLike:
                     {"id": "l1", "function": {"name": "send_like", "arguments": '{"user_id": 999, "times": 5}'}}
                 ],
                 "response_buffer": response_buf,
-                "group_id": 123,
+                "group_id": None,
                 "user_id": 111,
             },
             bot,
@@ -1807,7 +1799,7 @@ class TestSendLike:
     @pytest.mark.asyncio
     async def test_default_times(self, bot):
         """send_like without times defaults to 1."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1817,7 +1809,7 @@ class TestSendLike:
                     {"id": "l2", "function": {"name": "send_like", "arguments": '{"user_id": 999}'}}
                 ],
                 "response_buffer": response_buf,
-                "group_id": 123,
+                "group_id": None,
                 "user_id": 111,
             },
             bot,
@@ -1828,7 +1820,7 @@ class TestSendLike:
     @pytest.mark.asyncio
     async def test_private_context(self, bot):
         """send_like works in private chat context (no group_id)."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1852,7 +1844,7 @@ class TestOcrImage:
     @pytest.mark.asyncio
     async def test_basic(self, bot):
         """ocr_image calls call_action with ocr_image action."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1877,7 +1869,7 @@ class TestVoiceToText:
     @pytest.mark.asyncio
     async def test_basic(self, bot):
         """voice_to_text calls call_action with fetch_ptt_text action."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1907,7 +1899,7 @@ class TestThink:
     @pytest.mark.asyncio
     async def test_basic(self, bot):
         """think tool returns acknowledged=True."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -1928,7 +1920,7 @@ class TestThink:
     @pytest.mark.asyncio
     async def test_multiple_think_calls(self, bot):
         """Multiple think calls in one dispatch are all executed."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(
@@ -2007,7 +1999,7 @@ class TestQueryCharacter:
     @pytest.mark.asyncio
     async def test_execute_integration(self, bot):
         """query_character via _execute dispatch returns expected content."""
-        from plugins.llm_tools import llm_tools_handler
+        from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
         await llm_tools_handler(

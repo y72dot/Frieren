@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 import tomllib
 from dataclasses import dataclass, field
@@ -35,6 +34,7 @@ class SkillDef:
     parameters: dict[str, Any] = field(default_factory=dict)
     full_prompt: str = ""       # full markdown body for progressive loading
     file_path: str = ""
+    intents: set[str] = field(default_factory=set)
     _mtime: float = 0
 
     def to_tool_def(self, executor) -> ToolDef:
@@ -54,6 +54,10 @@ class SkillDef:
             risk_level=self.risk_level,
             category=self.category,
             executor=executor,
+            provider="skill",
+            packs={"skill"},
+            intents=set(self.intents) | {self.name, self.description},
+            default_enabled=False,
         )
 
 
@@ -171,6 +175,9 @@ class SkillManager:
             body = text.strip()
 
         name = meta.get("name", path.parent.name)
+        raw_intents = meta.get("intents", [])
+        if isinstance(raw_intents, str):
+            raw_intents = [raw_intents]
         return SkillDef(
             name=name,
             description=meta.get("description", f"Skill: {name}"),
@@ -179,6 +186,7 @@ class SkillManager:
             parameters=meta.get("parameters", {}),
             full_prompt=body,
             file_path=str(path),
+            intents={str(intent) for intent in raw_intents},
             _mtime=mtime,
         )
 

@@ -16,6 +16,7 @@ from src.core.llm.session_manager import Session, SessionManager
 from src.core.llm.tool_catalog import ToolCatalog
 from src.core.llm.tool_executor import ToolExecutor
 from src.core.llm.tool_permissions import ToolCallContext
+from src.core.llm.tool_selector import ToolSelectionRequest, ToolSelector
 from src.core.message_bus import BusMessage, MessageType
 
 
@@ -51,12 +52,14 @@ class AgentLoop:
         executor: ToolExecutor,
         breaker: CircuitBreaker | None = None,
         config: LoopConfig | None = None,
+        selector: ToolSelector | None = None,
     ) -> None:
         self.catalog = catalog
         self.session_mgr = session_mgr
         self.executor = executor
         self.breaker = breaker or CircuitBreaker()
         self.config = config or LoopConfig()
+        self.selector = selector or ToolSelector()
 
     # ------------------------------------------------------------------
     # main entry point
@@ -94,7 +97,20 @@ class AgentLoop:
             logger.debug(f"LLM turn {turn}/{max_turns}")
             session_log.turn_start(turn, max_turns)
 
-            tools = self.catalog.get_defs(ctx.user_is_admin)
+            tool_view = self.selector.select(
+                self.catalog,
+                ctx,
+                ToolSelectionRequest(
+                    user_text=_latest_user_text(session.messages),
+                    conversation_type="group" if ctx.group_id is not None else "private",
+                ),
+            )
+            tools = tool_view.schemas()
+            session_log.tool_view(tool_view.names, tool_view.active_packs)
+            logger.debug(
+                f"LLM tool view: session={session.session_key} "
+                f"count={len(tool_view)} packs={','.join(tool_view.active_packs)}"
+            )
             session_log.request(session.messages, cfg.model, len(tools))
 
             try:
@@ -263,6 +279,13 @@ class AgentLoop:
             ),
             bot,
         )
+
+
+def _latest_user_text(messages: list[dict[str, Any]]) -> str:
+    for message in reversed(messages):
+        if message.get("role") == "user":
+            return str(message.get("content", ""))
+    return ""
 
 
 # ------------------------------------------------------------------

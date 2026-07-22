@@ -1,8 +1,4 @@
-"""E2E tool execution tests: all 24 tools via INTERNAL llm_tools handler.
-
-Each test injects an ``llm_type: "tool"`` message into llm_tools_handler
-and verifies the correct API calls and response_buffer contents.
-"""
+"""E2E tool execution tests through the production ToolExecutor."""
 
 from __future__ import annotations
 
@@ -20,8 +16,8 @@ from tests.conftest_e2e import e2e_bot  # noqa: F401
 
 
 async def _run_tool(bot, tool_calls: list[ToolCall], group_id=456, user_id=111):
-    """Execute tools via llm_tools_handler and return response buffer results."""
-    from plugins.llm_tools import llm_tools_handler
+    """Execute tool calls directly and return normalized results."""
+    from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
     buf: dict = {}
     await llm_tools_handler(
@@ -380,6 +376,7 @@ class TestInteractionTools:
                     arguments={"user_id": 333, "times": 3},
                 )
             ],
+            group_id=None,
         )
         _assert_tool_result(results, "c1")
         assert any(

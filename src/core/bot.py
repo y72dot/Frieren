@@ -309,21 +309,13 @@ class Bot:
             )
         ):
             return
-        from plugins.llm_artifact_tools import register_artifact_tools
-        from plugins.llm_capability_tools import register_capability_tools
-        from plugins.llm_control_tools import register_control_tools
-        from plugins.llm_schedule_tools import register_schedule_tools
-        from plugins.llm_tools import register_llm_tools
         from src.core.llm.invocation_store import InvocationStore
         from src.core.llm.tool_catalog import ToolCatalog
         from src.core.llm.tool_executor import ToolExecutor
+        from src.core.llm.tools import register_builtin_tools
 
         self.tool_catalog = ToolCatalog()
-        register_llm_tools(self.tool_catalog)
-        register_artifact_tools(self.tool_catalog)
-        register_capability_tools(self.tool_catalog)
-        register_control_tools(self.tool_catalog)
-        register_schedule_tools(self.tool_catalog)
+        register_builtin_tools(self.tool_catalog)
         self.invocation_store = (
             InvocationStore(self.msg_store.connection)
             if cfg is None or cfg.invocation_persist
@@ -820,7 +812,7 @@ class Bot:
             )
             self.sandbox = SandboxManager(sandbox_config)
             self.sandbox.init_client()
-            from plugins.llm_sandbox_tools import register_sandbox_tools
+            from src.core.llm.tools import register_sandbox_tools
 
             register_sandbox_tools(self.tool_catalog)
             logger.info(

@@ -1,5 +1,6 @@
 """LLM subsystem – provider abstraction, session management, and tools."""
 
+# ruff: noqa: I001 - import order is dependency order for this facade module.
 from src.core.llm.provider import (
     LlmProvider,
     LlmResponse,
@@ -12,15 +13,18 @@ from src.core.llm.session_logger import LlmSessionLogger
 from src.core.llm.sandbox import RiskLevel
 from src.core.llm.tool_catalog import ToolCatalog, ToolDef
 from src.core.llm.tool_permissions import ToolCallContext, check_permission
+from src.core.llm.tool_selector import ToolSelectionRequest, ToolSelector
+from src.core.llm.tool_view import ToolView
 from src.core.llm.invocation_store import InvocationStore, ToolInvocation
 from src.core.llm.tool_executor import ToolExecutor
 
 # Phase 2: session management
 from src.core.llm.session_manager import Session, SessionManager
 
-# Phase 3: agent loop
+# Phase 3: agent loop and orchestration
 from src.core.llm.circuit_breaker import CircuitBreaker
 from src.core.llm.agent_loop import AgentLoop, AgentResult, LoopConfig
+from src.core.llm.agent_service import LlmAgentService
 
 # Phase 4: memory
 from src.core.llm.memory_manager import MemoryConfig, MemoryManager
@@ -46,6 +50,9 @@ __all__ = [
     # tool_permissions
     "ToolCallContext",
     "check_permission",
+    "ToolSelectionRequest",
+    "ToolSelector",
+    "ToolView",
     # tool_executor
     "ToolExecutor",
     "InvocationStore",
@@ -59,6 +66,7 @@ __all__ = [
     "AgentLoop",
     "AgentResult",
     "LoopConfig",
+    "LlmAgentService",
     # memory
     "MemoryConfig",
     "MemoryManager",

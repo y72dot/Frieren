@@ -47,7 +47,7 @@ def _reset_all_module_state() -> None:
 
     lc._session_cache.clear()
     # Reassign (don't .clear()) because _tools_registry may share the
-    # same list object as llm_tools.TOOL_DEFS installed by _lazy_init.
+    # core QQ provider's backward-compatible TOOL_DEFS list.
     lc._tools_registry = []
     reset_aq()
 
@@ -87,10 +87,9 @@ def _reset_all_module_state() -> None:
 
 
 def _register_llm_handlers(bot) -> None:
-    """Register llm_core / llm_tools / llm_sender as INTERNAL handlers."""
+    """Register the LLM trigger adapter and sender on the INTERNAL bus."""
     from plugins.llm_core import _lazy_init, llm_core_handler
     from plugins.llm_sender import llm_sender_handler
-    from plugins.llm_tools import llm_tools_handler
     from src.plugin.manager import _SubscribeAdapter
 
     _lazy_init(bot)
@@ -98,11 +97,6 @@ def _register_llm_handlers(bot) -> None:
         MessageType.INTERNAL,
         _SubscribeAdapter(llm_core_handler, "llm_core", 50),
         50,
-    )
-    bot.message_bus.subscribe(
-        MessageType.INTERNAL,
-        _SubscribeAdapter(llm_tools_handler, "llm_tools", 30),
-        30,
     )
     bot.message_bus.subscribe(
         MessageType.INTERNAL,

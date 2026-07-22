@@ -36,10 +36,10 @@ No NoneBot / AstrBot / Koishi — core is self-written.
 
 | 类                  | 职责                                                  |
 | ------------------- | ----------------------------------------------------- |
-| `ToolCatalog`     | `ToolDef` 注册，`get_defs(user_is_admin)` 过滤       |
+| `ToolCatalog`     | 注册全集；`ToolSelector`按权限/上下文/意图生成`ToolView` |
 | `ToolExecutor`    | 验证→权限→缓存→执行→审计，DESTRUCTIVE 写 `logs/audit.log` |
 | `SessionManager`  | TTL + `data/llm_state.db` 持久化 + crash 恢复 + 剪枝 |
-| `AgentLoop`       | ReAct 循环，运行时读`bot.llm_provider`               |
+| `AgentLoop`       | ReAct；工具仅直调`ToolExecutor`，不经 MessageBus RPC |
 | `CircuitBreaker`  | 连续错误/重复工具调用熔断                              |
 | `MemoryManager`   | 工作记忆(内存)+情景(episodes表)+语义(facts表)         |
 | `SkillManager`    | `config/skills/` 渐进式加载+热重载                    |

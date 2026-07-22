@@ -1,4 +1,4 @@
-"""Tests for llm_core – main LLM agent loop and orchestration."""
+"""Tests for the core LLM agent orchestration service."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ import pytest
 from src.core.llm import LlmResponse
 
 
-class TestLlmCoreHandler:
+class TestLlmAgentService:
     @pytest.mark.asyncio
     async def test_no_match(self, bot):
         """Returns False for non-trigger llm_type payloads."""
-        from plugins.llm_core import llm_core_handler
+        from src.core.llm.agent_service import handle_trigger as llm_core_handler
 
         result = await llm_core_handler({"llm_type": "other"}, bot)
         assert result is False
@@ -19,7 +19,8 @@ class TestLlmCoreHandler:
     @pytest.mark.asyncio
     async def test_simple_text_response(self, bot_with_llm):
         """Single-turn text response flow."""
-        from plugins.llm_core import _lazy_init, llm_core_handler
+        from src.core.llm.agent_service import _lazy_init
+        from src.core.llm.agent_service import handle_trigger as llm_core_handler
 
         # Pre-init tool registry
         _lazy_init(bot_with_llm)
@@ -28,16 +29,12 @@ class TestLlmCoreHandler:
         provider = bot_with_llm.llm_provider
         provider.responses = [LlmResponse(text="你好，有什么可以帮你吗？")]
 
-        # Register llm_tools and llm_sender handlers on the bus
+        # Only final response delivery remains on the MessageBus.
         from plugins.llm_sender import llm_sender_handler
-        from plugins.llm_tools import llm_tools_handler
         from src.core.message_bus import MessageType
 
         bot_with_llm.message_bus.subscribe(
             MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
-        )
-        bot_with_llm.message_bus.subscribe(
-            MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
         )
 
         result = await llm_core_handler(
@@ -56,6 +53,19 @@ class TestLlmCoreHandler:
         assert result is False
         # Verify LLM was called
         assert len(provider.calls) == 1
+        visible_names = {
+            item["function"]["name"] for item in provider.calls[0]["tools"]
+        }
+        assert visible_names == {
+            "react_emoji",
+            "get_current_time",
+            "query_history",
+            "tool_help",
+            "resolve_forward",
+            "get_group_info",
+            "get_member_info",
+            "list_message_artifacts",
+        }
         # Verify reply was sent
         send_calls = [
             c for c in bot_with_llm.api.calls
@@ -68,7 +78,8 @@ class TestLlmCoreHandler:
     @pytest.mark.asyncio
     async def test_multi_turn_with_tool_calls(self, bot_with_llm):
         """Multi-turn flow: tool call then text response."""
-        from plugins.llm_core import _lazy_init, llm_core_handler
+        from src.core.llm.agent_service import _lazy_init
+        from src.core.llm.agent_service import handle_trigger as llm_core_handler
 
         _lazy_init(bot_with_llm)
 
@@ -91,14 +102,10 @@ class TestLlmCoreHandler:
         ]
 
         from plugins.llm_sender import llm_sender_handler
-        from plugins.llm_tools import llm_tools_handler
         from src.core.message_bus import MessageType
 
         bot_with_llm.message_bus.subscribe(
             MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
-        )
-        bot_with_llm.message_bus.subscribe(
-            MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
         )
 
         result = await llm_core_handler(
@@ -128,7 +135,8 @@ class TestLlmCoreHandler:
     @pytest.mark.asyncio
     async def test_tool_call_to_sender_fallback(self, bot_with_llm):
         """When LLM returns tool_calls repeatedly, max_turns triggers final reply."""
-        from plugins.llm_core import _lazy_init, llm_core_handler
+        from src.core.llm.agent_service import _lazy_init
+        from src.core.llm.agent_service import handle_trigger as llm_core_handler
 
         _lazy_init(bot_with_llm)
 
@@ -149,14 +157,10 @@ class TestLlmCoreHandler:
         provider.responses = [tool_response] * 3 + [LlmResponse(text="够了")]
 
         from plugins.llm_sender import llm_sender_handler
-        from plugins.llm_tools import llm_tools_handler
         from src.core.message_bus import MessageType
 
         bot_with_llm.message_bus.subscribe(
             MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
-        )
-        bot_with_llm.message_bus.subscribe(
-            MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
         )
 
         result = await llm_core_handler(
@@ -179,7 +183,8 @@ class TestLlmCoreHandler:
     @pytest.mark.asyncio
     async def test_empty_reply_not_sent(self, bot_with_llm):
         """Empty LLM responses are not forwarded to sender."""
-        from plugins.llm_core import _lazy_init, llm_core_handler
+        from src.core.llm.agent_service import _lazy_init
+        from src.core.llm.agent_service import handle_trigger as llm_core_handler
 
         _lazy_init(bot_with_llm)
 
@@ -187,14 +192,10 @@ class TestLlmCoreHandler:
         provider.responses = [LlmResponse(text="")]
 
         from plugins.llm_sender import llm_sender_handler
-        from plugins.llm_tools import llm_tools_handler
         from src.core.message_bus import MessageType
 
         bot_with_llm.message_bus.subscribe(
             MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
-        )
-        bot_with_llm.message_bus.subscribe(
-            MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
         )
 
         await llm_core_handler(
@@ -222,7 +223,8 @@ class TestSessionCache:
     @pytest.mark.asyncio
     async def test_session_reuse_within_ttl(self, bot_with_llm):
         """Same session_key within TTL reuses messages list."""
-        from plugins.llm_core import _lazy_init, _session_cache, llm_core_handler
+        from src.core.llm.agent_service import _lazy_init, _session_cache
+        from src.core.llm.agent_service import handle_trigger as llm_core_handler
 
         _session_cache.clear()
         _lazy_init(bot_with_llm)
@@ -234,14 +236,10 @@ class TestSessionCache:
         ]
 
         from plugins.llm_sender import llm_sender_handler
-        from plugins.llm_tools import llm_tools_handler
         from src.core.message_bus import MessageType
 
         bot_with_llm.message_bus.subscribe(
             MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
-        )
-        bot_with_llm.message_bus.subscribe(
-            MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
         )
 
         payload = {
@@ -271,7 +269,8 @@ class TestSessionCache:
     @pytest.mark.asyncio
     async def test_session_ttl_zero_always_fresh(self, bot_with_llm):
         """session_ttl=0 disables cache, every call starts fresh."""
-        from plugins.llm_core import _lazy_init, _session_cache, llm_core_handler
+        from src.core.llm.agent_service import _lazy_init, _session_cache
+        from src.core.llm.agent_service import handle_trigger as llm_core_handler
 
         _session_cache.clear()
         _lazy_init(bot_with_llm)
@@ -285,14 +284,10 @@ class TestSessionCache:
         ]
 
         from plugins.llm_sender import llm_sender_handler
-        from plugins.llm_tools import llm_tools_handler
         from src.core.message_bus import MessageType
 
         bot_with_llm.message_bus.subscribe(
             MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
-        )
-        bot_with_llm.message_bus.subscribe(
-            MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
         )
 
         payload = {
@@ -319,7 +314,8 @@ class TestSessionCache:
     @pytest.mark.asyncio
     async def test_session_expired_after_ttl(self, bot_with_llm, monkeypatch):
         """Session entry older than TTL starts a fresh session."""
-        from plugins.llm_core import _lazy_init, _session_cache, llm_core_handler
+        from src.core.llm.agent_service import _lazy_init, _session_cache
+        from src.core.llm.agent_service import handle_trigger as llm_core_handler
 
         _session_cache.clear()
         _lazy_init(bot_with_llm)
@@ -331,14 +327,10 @@ class TestSessionCache:
         ]
 
         from plugins.llm_sender import llm_sender_handler
-        from plugins.llm_tools import llm_tools_handler
         from src.core.message_bus import MessageType
 
         bot_with_llm.message_bus.subscribe(
             MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
-        )
-        bot_with_llm.message_bus.subscribe(
-            MessageType.INTERNAL, _make_adapter(llm_tools_handler, "llm_tools", 30), 30
         )
 
         payload = {

@@ -193,7 +193,6 @@ def test_auto_discover_skips_disabled():
             "action_queue_handler",
             "llm_gate",
             "llm_core_handler",
-            "llm_tools_handler",
             "llm_sender_handler",
         ],
     )
