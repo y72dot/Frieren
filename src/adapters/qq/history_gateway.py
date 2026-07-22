@@ -90,7 +90,19 @@ class QQHistoryGateway:
         }
         if message_seq is not None:
             params["message_seq"] = message_seq
-        response = await self.api.call_action(action, **params)
+        quiet_call = getattr(self.api, "call_action_quiet", None)
+        response = (
+            await quiet_call(action, **params)
+            if quiet_call is not None
+            else await self.api.call_action(action, **params)
+        )
+        if _is_missing_message_response(response):
+            return HistoryPage(
+                messages=[],
+                requested_anchor=message_seq,
+                next_anchor=None,
+                exhausted=True,
+            )
         data = _response_data(response)
         messages = data.get("messages", []) if isinstance(data, dict) else []
         messages = [item for item in messages if isinstance(item, dict)]
@@ -121,6 +133,15 @@ def _response_data(response: Any) -> Any:
             )
         )
     return response.get("data", response)
+
+
+def _is_missing_message_response(response: Any) -> bool:
+    if not isinstance(response, dict):
+        return False
+    if response.get("status") != "failed" and response.get("retcode") in (None, 0):
+        return False
+    text = str(response.get("message") or response.get("wording") or "")
+    return "消息" in text and "不存在" in text
 
 
 def _integer(value: Any) -> int | None:

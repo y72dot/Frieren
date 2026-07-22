@@ -154,3 +154,38 @@ async def test_search_only_parses_results_and_does_not_fetch_targets(tmp_path):
     assert len(requested) == 1
     assert results[0].url == "https://example.com/doc"
     assert results[0].snippet == "Useful snippet"
+
+
+@pytest.mark.asyncio
+async def test_search_falls_back_to_bing_when_primary_has_no_results(tmp_path):
+    requested = []
+
+    def handler(request):
+        requested.append(str(request.url))
+        if "duckduckgo.com" in str(request.url):
+            return httpx.Response(
+                202,
+                headers={"content-type": "text/html"},
+                text="<html><title>DuckDuckGo</title><body>challenge</body></html>",
+                request=request,
+            )
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text=(
+                '<ol><li class="b_algo"><a href="https://example.com/site">Site</a>'
+                '<h2><a href="https://example.com/news">'
+                "News result</a></h2><div class=\"b_caption\"><p>Latest details"
+                "</p></div></li></ol>"
+            ),
+            request=request,
+        )
+
+    client, _ = _client(tmp_path, handler)
+    results = await client.search("latest news")
+
+    assert len(requested) == 2
+    assert "bing.com" in requested[1]
+    assert results[0].title == "News result"
+    assert results[0].url == "https://example.com/news"
+    assert results[0].snippet == "Latest details"

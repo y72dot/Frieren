@@ -77,9 +77,25 @@ class _QQExec:
         if not action:
             logger.warning("ACTION message without 'action' field, dropping")
             return None
-        params = {k: v for k, v in payload.items() if k != "action"}
+        quiet = bool(payload.get("_qqbot_quiet", False))
+        params = {
+            k: v
+            for k, v in payload.items()
+            if k not in {"action", "_qqbot_quiet"}
+        }
         logger.debug(f"_QQExec: {action}")
-        return await bot.api._raw_call(action, **params)
+        try:
+            return await bot.api._raw_call(action, log_errors=not quiet, **params)
+        except Exception as exc:
+            if not quiet:
+                raise
+            logger.debug(f"Optional QQ action failed: {action}: {exc}")
+            return {
+                "status": "failed",
+                "retcode": -1,
+                "data": None,
+                "message": str(exc),
+            }
 
 
 # ---------------------------------------------------------------------------

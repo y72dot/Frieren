@@ -54,6 +54,7 @@ class SafeWebClient:
         max_response_bytes: int = 2_097_152,
         max_redirects: int = 3,
         search_url: str = "https://html.duckduckgo.com/html/?q={query}",
+        search_fallback_urls: list[str] | None = None,
         user_agent: str = "qqbot-agent/1.0",
         resolver: Resolver | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
@@ -63,20 +64,48 @@ class SafeWebClient:
         self.max_response_bytes = max_response_bytes
         self.max_redirects = max_redirects
         self.search_url = search_url
+        self.search_fallback_urls = list(
+            search_fallback_urls
+            if search_fallback_urls is not None
+            else ["https://www.bing.com/search?q={query}"]
+        )
         self.user_agent = user_agent
         self.resolver = resolver or _resolve
         self.transport = transport
 
     async def search(self, query: str, *, limit: int = 10) -> list[WebSearchResult]:
-        url = self.search_url.format(query=quote_plus(query))
-        response, final_url, content = await self._request(url, allowed_mime={"text/html"})
-        del response
-        parser = _SearchParser()
-        parser.feed(content.decode("utf-8", errors="replace"))
-        return [
-            WebSearchResult(title=item[0], url=_unwrap_result_url(item[1]), snippet=item[2], source=final_url)
-            for item in parser.results[:limit]
-        ]
+        templates = list(dict.fromkeys([self.search_url, *self.search_fallback_urls]))
+        failures: list[str] = []
+        for template in templates:
+            url = template.format(query=quote_plus(query))
+            try:
+                response, final_url, content = await self._request(
+                    url, allowed_mime={"text/html"}
+                )
+                del response
+            except Exception as exc:
+                failures.append(f"{urlparse(url).hostname}: {exc}")
+                continue
+            parser = (
+                _BingSearchParser()
+                if "bing.com" in (urlparse(final_url).hostname or "")
+                else _SearchParser()
+            )
+            parser.feed(content.decode("utf-8", errors="replace"))
+            results = [
+                WebSearchResult(
+                    title=item[0],
+                    url=_unwrap_result_url(item[1]),
+                    snippet=item[2],
+                    source=final_url,
+                )
+                for item in parser.results[:limit]
+                if item[0] and item[1]
+            ]
+            if results:
+                return results
+            failures.append(f"{urlparse(final_url).hostname}: no parseable results")
+        raise RuntimeError("web search providers unavailable: " + "; ".join(failures))
 
     async def fetch(self, url: str) -> WebDocument:
         response, final_url, content = await self._request(
@@ -259,6 +288,55 @@ class _SearchParser(HTMLParser):
             if self.results and self._snippet:
                 title, href, _ = self.results[-1]
                 self.results[-1] = (title, href, self._snippet.strip())
+
+    def handle_data(self, data: str) -> None:
+        if self._capture_title:
+            self._title += data
+        if self._capture_snippet:
+            self._snippet += data
+
+
+class _BingSearchParser(HTMLParser):
+    """Extract organic results from Bing's ``li.b_algo`` markup."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.results: list[tuple[str, str, str]] = []
+        self._in_result = False
+        self._in_heading = False
+        self._capture_title = False
+        self._capture_snippet = False
+        self._href = ""
+        self._title = ""
+        self._snippet = ""
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = dict(attrs)
+        classes = set((values.get("class") or "").split())
+        if tag == "li" and "b_algo" in classes:
+            self._in_result = True
+            self._href = self._title = self._snippet = ""
+        elif self._in_result and tag == "h2":
+            self._in_heading = True
+        elif self._in_result and self._in_heading and tag == "a" and not self._href:
+            self._href = values.get("href") or ""
+            self._capture_title = bool(self._href)
+        elif self._in_result and tag == "p":
+            self._capture_snippet = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "a":
+            self._capture_title = False
+        elif tag == "h2":
+            self._in_heading = False
+        elif tag == "p":
+            self._capture_snippet = False
+        elif tag == "li" and self._in_result:
+            if self._href and self._title.strip():
+                self.results.append(
+                    (self._title.strip(), self._href, self._snippet.strip())
+                )
+            self._in_result = False
 
     def handle_data(self, data: str) -> None:
         if self._capture_title:

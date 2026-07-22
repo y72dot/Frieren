@@ -7,6 +7,7 @@ import time
 import pytest
 
 from src.core.llm import LlmResponse, ToolCall
+from src.core.llm.content_guard import SAFE_FINAL_FALLBACK
 from tests.conftest_e2e import (
     FakeLlmProvider,
     assert_api_called,
@@ -121,6 +122,77 @@ class TestMultiTurnScenarios:
             e2e_llm_bot, "send_group_msg",
             group_id=456, message="Forced final reply.",
         )
+
+    @pytest.mark.llm
+    @pytest.mark.asyncio
+    async def test_max_turns_blocks_dsml_forced_final(self, e2e_llm_bot):
+        e2e_llm_bot.config.llm.max_turns = 1
+        _make_provider(
+            e2e_llm_bot,
+            [
+                LlmResponse(
+                    tool_calls=[
+                        ToolCall(id="c1", name="get_current_time", arguments={})
+                    ]
+                ),
+                LlmResponse(
+                    text=(
+                        '<｜｜DSML｜｜tool_calls><｜｜DSML｜｜invoke '
+                        'name="web_fetch">'
+                    )
+                ),
+            ],
+        )
+
+        await dispatch_raw_event(e2e_llm_bot, _raw_at_msg())
+
+        assert_api_called(
+            e2e_llm_bot,
+            "send_group_msg",
+            group_id=456,
+            message=SAFE_FINAL_FALLBACK,
+        )
+
+    @pytest.mark.llm
+    @pytest.mark.asyncio
+    async def test_session_summary_uses_agent_tool_count(
+        self, e2e_llm_bot, monkeypatch
+    ):
+        import plugins.llm_core as llm_core
+
+        class CapturingSessionLogger:
+            last = None
+
+            def __init__(self, session_key):
+                self.tool_count = 0
+                self.ended_tool_count = None
+                CapturingSessionLogger.last = self
+
+            def tool_calls_result(self, calls):
+                self.tool_count += len(calls)
+
+            def session_end(self, turns):
+                self.ended_tool_count = self.tool_count
+
+            def __getattr__(self, name):
+                return lambda *args, **kwargs: None
+
+        monkeypatch.setattr(llm_core, "LlmSessionLogger", CapturingSessionLogger)
+        _make_provider(
+            e2e_llm_bot,
+            [
+                LlmResponse(
+                    tool_calls=[
+                        ToolCall(id="c1", name="get_current_time", arguments={})
+                    ]
+                ),
+                LlmResponse(text="done"),
+            ],
+        )
+
+        await dispatch_raw_event(e2e_llm_bot, _raw_at_msg())
+
+        assert CapturingSessionLogger.last.ended_tool_count == 1
 
     @pytest.mark.llm
     @pytest.mark.asyncio

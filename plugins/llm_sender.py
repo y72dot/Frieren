@@ -7,6 +7,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.core.llm.content_guard import user_safe_text
 from src.core.message_bus import MessageType
 from src.plugin.decorators import subscribe
 
@@ -21,7 +22,10 @@ async def llm_sender_handler(payload: dict[str, Any], bot) -> bool:
 
     target_id: int = payload["target_id"]
     is_group: bool = payload["is_group"]
-    text: str = payload["text"]
+    raw_text: str = payload["text"]
+    text = user_safe_text(raw_text)
+    if text != raw_text:
+        logger.error("llm_sender blocked internal tool protocol from outbound message")
 
     bot_qq = bot.config.bot.qq
     bot_nickname = (

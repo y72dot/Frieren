@@ -182,6 +182,9 @@ class _FailingNapCat:
     async def send_group_msg(self, **kwargs):
         raise ConnectionError("network down")
 
+    async def get_msg(self, **kwargs):
+        raise LookupError("消息不存在")
+
 
 @pytest.mark.asyncio
 async def test_api_call_propagates_error():
@@ -189,6 +192,17 @@ async def test_api_call_propagates_error():
     client.set_client(_FailingNapCat())
     with pytest.raises(ConnectionError, match="network down"):
         await client.send_group_msg(group_id=1, message="x")
+
+
+@pytest.mark.asyncio
+async def test_quiet_action_returns_failure_instead_of_raising():
+    client = ApiClient()
+    client.set_client(_FailingNapCat())
+
+    result = await client.call_action_quiet("get_msg", message_id=42)
+
+    assert result["status"] == "failed"
+    assert "消息不存在" in result["message"]
 
 
 @pytest.mark.asyncio

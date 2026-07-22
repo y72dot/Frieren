@@ -223,7 +223,7 @@ async def llm_core_handler(payload: dict[str, Any], bot) -> bool:
     # Run the agent loop
     agent_loop: AgentLoop | None = getattr(bot, "agent_loop", None)
     if agent_loop is not None:
-        result = await agent_loop.run(session, ctx, bot)
+        result = await agent_loop.run(session, ctx, bot, session_log=session_log)
     else:
         # Fallback: inline loop for tests without agent_loop
         result = await _inline_loop(session, ctx, bot, payload, session_log)

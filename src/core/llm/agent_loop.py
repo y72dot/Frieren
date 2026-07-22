@@ -11,6 +11,7 @@ from loguru import logger
 
 from src.core.llm import LlmResponse, LlmSessionLogger, ToolCall
 from src.core.llm.circuit_breaker import CircuitBreaker
+from src.core.llm.content_guard import contains_internal_tool_protocol, user_safe_text
 from src.core.llm.session_manager import Session, SessionManager
 from src.core.llm.tool_catalog import ToolCatalog
 from src.core.llm.tool_executor import ToolExecutor
@@ -66,6 +67,8 @@ class AgentLoop:
         session: Session,
         ctx: ToolCallContext,
         bot,
+        *,
+        session_log: LlmSessionLogger | None = None,
     ) -> AgentResult:
         """Execute the agent loop for *session*.
 
@@ -81,7 +84,7 @@ class AgentLoop:
         self.breaker.reset()
         effective = bot.config_center.config if getattr(bot, "config_center", None) else bot.config
         cfg = effective.llm
-        session_log = LlmSessionLogger(session.session_key)
+        session_log = session_log or LlmSessionLogger(session.session_key)
 
         max_turns = self.config.max_turns
         turn = 0
@@ -113,7 +116,10 @@ class AgentLoop:
 
             # -- text response: conversation complete --
             if not response.tool_calls:
-                reply = response.text or ""
+                raw_reply = response.text or ""
+                reply = user_safe_text(raw_reply)
+                if reply != raw_reply:
+                    logger.error("Blocked internal tool protocol in LLM text response")
                 session_log.text_response(reply)
                 if reply.strip():
                     await self._emit_send(bot, ctx, reply)
@@ -171,9 +177,20 @@ class AgentLoop:
         # -- Max turns reached: force final text reply --
         logger.warning("LLM agent reached max_turns, forcing final reply")
         session_log.max_turns_forced()
+        final_messages = [
+            *session.messages,
+            {
+                "role": "system",
+                "content": (
+                    "工具调用预算已经耗尽。现在必须直接给出纯文本最终答复；"
+                    "不得调用工具，不得输出 DSML、tool_calls、XML 或函数调用协议。"
+                    "如果证据不足，请明确说明不足。"
+                ),
+            },
+        ]
         try:
             response = await bot.llm_provider.chat_completion(
-                session.messages,
+                final_messages,
                 model=cfg.model,
                 max_tokens=cfg.max_tokens,
                 temperature=cfg.temperature,
@@ -181,7 +198,11 @@ class AgentLoop:
         except Exception:
             response = LlmResponse(text="抱歉，处理超时，请稍后再试。")
 
-        reply = response.text or ""
+        raw_reply = response.text or ""
+        if response.tool_calls or contains_internal_tool_protocol(raw_reply):
+            logger.error("Blocked tool call/protocol returned during forced final reply")
+            raw_reply = ""
+        reply = user_safe_text(raw_reply) if raw_reply else user_safe_text("<tool_call>")
         session_log.text_response(reply)
         if reply.strip():
             await self._emit_send(bot, ctx, reply)

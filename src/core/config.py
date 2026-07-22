@@ -228,6 +228,9 @@ class WebConfig:
     max_response_bytes: int = 2_097_152
     max_redirects: int = 3
     search_url: str = "https://html.duckduckgo.com/html/?q={query}"
+    search_fallback_urls: list[str] = field(
+        default_factory=lambda: ["https://www.bing.com/search?q={query}"]
+    )
     user_agent: str = "qqbot-agent/1.0"
 
 
@@ -574,12 +577,16 @@ def _parse_workspace_section(data: dict[str, Any]) -> WorkspaceConfig:
 
 
 def _parse_web_section(data: dict[str, Any]) -> WebConfig:
+    fallback_urls = data.get(
+        "search_fallback_urls", ["https://www.bing.com/search?q={query}"]
+    )
     return WebConfig(
         enabled=bool(data.get("enabled", True)),
         timeout=float(data.get("timeout", 20.0)),
         max_response_bytes=int(data.get("max_response_bytes", 2_097_152)),
         max_redirects=int(data.get("max_redirects", 3)),
         search_url=str(data.get("search_url", "https://html.duckduckgo.com/html/?q={query}")),
+        search_fallback_urls=[str(item) for item in fallback_urls],
         user_agent=str(data.get("user_agent", "qqbot-agent/1.0")),
     )
 

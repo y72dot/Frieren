@@ -46,6 +46,9 @@ class ApiClientProtocol(Protocol):
     async def set_essence_msg(self, message_id: int) -> dict[str, Any]: ...
     async def delete_essence_msg(self, message_id: int) -> dict[str, Any]: ...
     async def call_action(self, action: str, **params: Any) -> dict[str, Any]: ...
+    async def call_action_quiet(
+        self, action: str, **params: Any
+    ) -> dict[str, Any]: ...
     async def get_file(self, file_id: str) -> dict[str, Any]: ...
     async def upload_group_file(
         self, group_id: int, file: str, name: str, folder: str | None = None
@@ -99,7 +102,9 @@ class ApiClient:
             raise RuntimeError("ApiClient is not connected – no active napcat client")
         return self._client
 
-    async def _call(self, action: str, **params: Any) -> dict[str, Any]:
+    async def _call(
+        self, action: str, *, log_errors: bool = True, **params: Any
+    ) -> dict[str, Any]:
         client = self._ensure_client()
         # Truncate message content for logging brevity.
         log_params = {}
@@ -125,16 +130,21 @@ class ApiClient:
             logger.debug(" ".join(parts))
             return result
         except Exception:
-            logger.opt(exception=True).error(f"API call failed: {action}")
+            if log_errors:
+                logger.opt(exception=True).error(f"API call failed: {action}")
+            else:
+                logger.debug(f"Optional API call unavailable: {action}")
             raise
 
-    async def _raw_call(self, action: str, **params: Any) -> dict[str, Any]:
+    async def _raw_call(
+        self, action: str, *, log_errors: bool = True, **params: Any
+    ) -> dict[str, Any]:
         """Direct API call that bypasses the message bus.
 
         Used by the built-in ``_qq_exec`` handler to perform the
         actual napcat API invocation without re-entering the bus.
         """
-        result = await self._call(action, **params)
+        result = await self._call(action, log_errors=log_errors, **params)
         self._record_outbound_message(action, params, result)
         return result
 
@@ -188,9 +198,12 @@ class ApiClient:
 
     async def _dispatch_action(self, action: str, **params: Any) -> dict[str, Any]:
         """Route an ACTION message through the bus, or direct call if no bus."""
+        quiet = bool(params.pop("_qqbot_quiet", False))
         if self._bus is not None:
             logger.debug(f"Dispatching ACTION via bus: {action}")
             payload: dict[str, Any] = {"action": action, **params}
+            if quiet:
+                payload["_qqbot_quiet"] = True
             msg = BusMessage(
                 type=MessageType.ACTION,
                 payload=payload,
@@ -199,7 +212,17 @@ class ApiClient:
             result = await self._bus.dispatch(msg, self._bot)
             return result if isinstance(result, dict) else {}
         logger.debug(f"Direct API call (no bus): {action}")
-        return await self._call(action, **params)
+        try:
+            return await self._call(action, log_errors=not quiet, **params)
+        except Exception as exc:
+            if not quiet:
+                raise
+            return {
+                "status": "failed",
+                "retcode": -1,
+                "data": None,
+                "message": str(exc),
+            }
 
     # ------------------------------------------------------------------
     # messaging
@@ -378,3 +401,7 @@ class ApiClient:
     async def call_action(self, action: str, **params: Any) -> dict[str, Any]:
         """Low-level API call for actions not yet wrapped as methods."""
         return await self._dispatch_action(action, **params)
+
+    async def call_action_quiet(self, action: str, **params: Any) -> dict[str, Any]:
+        """Call an optional read action and return failures without ERROR noise."""
+        return await self._dispatch_action(action, _qqbot_quiet=True, **params)

@@ -135,7 +135,14 @@ async def _exec_query_history(args: dict, group_id: int | None, user_id: int | N
     has_other_filters = bool(keyword or uid is not None or time_after is not None or time_before is not None)
     if not msgs and msg_id is not None and not has_other_filters:
         try:
-            raw = await bot.api.get_msg(msg_id)
+            quiet_call = getattr(bot.api, "call_action_quiet", None)
+            raw = (
+                await quiet_call("get_msg", message_id=msg_id)
+                if quiet_call is not None
+                else await bot.api.get_msg(msg_id)
+            )
+            if raw.get("status") == "failed":
+                raise LookupError(raw.get("message") or "message unavailable")
             data = raw.get("data", raw)
             sender = data.get("sender", {})
             _uid = sender.get("user_id", 0)

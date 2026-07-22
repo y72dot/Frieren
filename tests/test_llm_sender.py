@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from plugins.llm_sender import _QQ_MSG_LIMIT, _split_message
+from src.core.llm.content_guard import SAFE_FINAL_FALLBACK
 
 
 class TestSplitMessage:
@@ -142,3 +143,21 @@ async def test_sender_chunks_long_message(bot):
     # Both chunks recorded in msg_store
     msgs = bot.msg_store.recent(12345)
     assert len(msgs) == 2
+
+
+@pytest.mark.asyncio
+async def test_sender_blocks_internal_dsml_protocol(bot):
+    from plugins.llm_sender import llm_sender_handler
+
+    await llm_sender_handler(
+        {
+            "llm_type": "send",
+            "target_id": 12345,
+            "is_group": True,
+            "text": '<｜｜DSML｜｜tool_calls><｜｜DSML｜｜invoke name="web_fetch">',
+        },
+        bot,
+    )
+
+    assert bot.api.calls[0]["message"] == SAFE_FINAL_FALLBACK
+    assert "DSML" not in bot.api.calls[0]["message"]

@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from src.adapters.qq.history_gateway import HistoryPage
+from src.adapters.qq.history_gateway import HistoryPage, QQHistoryGateway
 from src.core.event_bus import EventBus
 from src.core.history import HistorySyncService
 from src.core.message_store import MessageStore
@@ -43,6 +43,24 @@ class _Gateway:
             raise self.error
         return self.pages.pop(0)
 
+
+@pytest.mark.asyncio
+async def test_missing_history_anchor_is_an_exhausted_boundary():
+    class Api:
+        async def call_action_quiet(self, action, **params):
+            return {
+                "status": "failed",
+                "retcode": -1,
+                "message": "消息180604217不存在",
+            }
+
+    page = await QQHistoryGateway(Api()).group_history(
+        123, message_seq=180604217, count=20
+    )
+
+    assert page.messages == []
+    assert page.exhausted is True
+    assert page.requested_anchor == 180604217
 
 @pytest.mark.asyncio
 async def test_backfill_is_lossless_deduplicated_and_order_independent():
