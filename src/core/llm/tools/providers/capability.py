@@ -8,19 +8,9 @@ from src.core.llm.tool_catalog import ToolCatalog, ToolDef
 
 async def _search(domain: str, args: dict, group_id, user_id, bot) -> dict:
     bot.ensure_capability_services()
-    filters = {}
-    if domain == "messages":
-        filters = {
-            "conversation_type": "group" if group_id is not None else "private",
-            "conversation_id": group_id if group_id is not None else user_id,
-        }
     return bot.search_service.search(
-        domain, args["query"], limit=args.get("limit", 20), **filters
+        domain, args["query"], limit=args.get("limit", 20)
     )
-
-
-async def _search_messages(args, group_id, user_id, bot):
-    return await _search("messages", args, group_id, user_id, bot)
 
 
 async def _search_artifacts(args, group_id, user_id, bot):
@@ -109,7 +99,6 @@ def _search_tool(name: str, description: str, executor, *, admin: bool = False) 
 
 
 _TOOLS = [
-    _search_tool("search_messages", "搜索当前 QQ 会话的本地消息，返回可追溯 message 引用", _search_messages),
     _search_tool("search_artifacts", "搜索 Bot 已归档的文件和网页 Artifact", _search_artifacts, admin=True),
     _search_tool("search_workspace", "搜索 Bot 本地工作区文件名和文本", _search_workspace, admin=True),
     _search_tool("search_tasks", "搜索持久化任务、状态和任务模板", _search_tasks, admin=True),

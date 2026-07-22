@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from plugins.llm_artifact_tools import register_artifact_tools
+from src.core.llm.tools.providers.artifact import register_artifact_tools
 from src.core.llm.sandbox import RiskLevel
 from src.core.llm.tool_catalog import ToolCatalog
 

@@ -50,19 +50,18 @@ def test_default_views_are_small_stable_and_contextual():
     private = _select("你好", group=False)
 
     assert first.names == second.names
-    assert 6 <= len(first) <= 12
+    assert 5 <= len(first) <= 12
     assert set(first.names) == {
         "react_emoji",
         "get_current_time",
         "query_history",
-        "tool_help",
         "resolve_forward",
         "get_group_info",
         "get_member_info",
         "list_message_artifacts",
     }
     assert "get_group_info" not in private.names
-    assert len(private) == 6
+    assert len(private) == 5
 
 
 def test_admin_intent_activates_moderation_without_exposing_it_to_users():
@@ -83,7 +82,8 @@ def test_feature_packs_are_intent_gated_and_admin_filtered():
 
     assert "web_search" not in normal.names
     assert {"web_search", "web_fetch", "web_download"}.issubset(web.names)
-    assert {"sandbox_exec", "sandbox_read", "sandbox_write"}.issubset(sandbox.names)
+    assert "sandbox_exec" in sandbox.names
+    assert "sandbox_delete" in sandbox.names
     assert "web_search" not in non_admin_web.names
 
 
@@ -95,7 +95,7 @@ def test_context_and_explicit_pack_controls_are_hard_filters():
     assert "send_poke" in group.names
     assert "send_like" not in group.names
     assert "send_like" in private.names
-    assert "send_poke" not in private.names
+    assert "send_poke" in private.names
     assert "web_search" not in disabled.names
 
 

@@ -15,6 +15,7 @@ from src.core.llm.tool_catalog import ToolCatalog, ToolDef
 from src.core.llm.tool_permissions import ToolCallContext, check_permission
 from src.core.llm.tool_selector import ToolSelectionRequest, ToolSelector
 from src.core.llm.tool_view import ToolView
+from src.core.llm.tool_metrics import ToolMetrics, ToolMetricsSnapshot
 from src.core.llm.invocation_store import InvocationStore, ToolInvocation
 from src.core.llm.tool_executor import ToolExecutor
 
@@ -53,6 +54,8 @@ __all__ = [
     "ToolSelectionRequest",
     "ToolSelector",
     "ToolView",
+    "ToolMetrics",
+    "ToolMetricsSnapshot",
     # tool_executor
     "ToolExecutor",
     "InvocationStore",

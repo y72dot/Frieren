@@ -18,10 +18,8 @@ from src.core.message_store import StoredMessage
 
 
 async def _exec_set_essence(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
-    return await bot.api.set_essence_msg(args["message_id"])
-
-
-async def _exec_remove_essence(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
+    if args.get("enabled", True):
+        return await bot.api.set_essence_msg(args["message_id"])
     return await bot.api.delete_essence_msg(args["message_id"])
 
 
@@ -30,7 +28,7 @@ async def _exec_react_emoji(args: dict, group_id: int | None, user_id: int | Non
         "set_msg_emoji_like",
         message_id=args["message_id"],
         emoji_id=args["emoji_id"],
-        set=True,
+        set=args.get("enabled", True),
     )
 
 
@@ -169,13 +167,6 @@ async def _exec_query_history(args: dict, group_id: int | None, user_id: int | N
     }
 
 
-async def _exec_tool_help(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
-    tool_name = args.get("tool_name")
-    if tool_name:
-        return _help_single(tool_name)
-    return _help_all()
-
-
 async def _exec_get_group_info(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
     result = await bot.api.get_group_info(group_id)
     data = result.get("data", result)
@@ -292,7 +283,10 @@ async def _exec_set_admin(args: dict, group_id: int | None, user_id: int | None,
 
 
 async def _exec_send_poke(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
-    return await bot.api.send_group_poke(group_id, args["user_id"])
+    params = {"user_id": args["user_id"], "target_id": args["user_id"]}
+    if group_id is not None:
+        params["group_id"] = group_id
+    return await bot.api.call_action("group_poke", **params)
 
 
 async def _exec_send_like(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
@@ -307,11 +301,6 @@ async def _exec_ocr_image(args: dict, group_id: int | None, user_id: int | None,
 
 async def _exec_voice_to_text(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
     return await bot.api.call_action("fetch_ptt_text", message_id=args["message_id"])
-
-
-async def _exec_think(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
-    logger.info(f"THINK tool: {args.get('reasoning', '')}")
-    return {"acknowledged": True}
 
 
 async def _exec_query_character(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
@@ -331,10 +320,13 @@ _tool_defs: list[ToolDef] = []
 
 _tool_defs.append(ToolDef(
     name="set_essence",
-    description="将一条消息设为群精华消息",
+    description="设置或取消一条群精华消息",
     parameters={
         "type": "object",
-        "properties": {"message_id": {"type": "integer", "description": "要设精的消息ID"}},
+        "properties": {
+            "message_id": {"type": "integer", "description": "目标消息ID"},
+            "enabled": {"type": "boolean", "description": "true=设为精华，false=取消；默认true"},
+        },
         "required": ["message_id"],
     },
     risk_level=RiskLevel.WRITE,
@@ -342,25 +334,14 @@ _tool_defs.append(ToolDef(
     executor=_exec_set_essence,
 ))
 _tool_defs.append(ToolDef(
-    name="remove_essence",
-    description="取消一条群精华消息",
-    parameters={
-        "type": "object",
-        "properties": {"message_id": {"type": "integer", "description": "要取消精华的消息ID"}},
-        "required": ["message_id"],
-    },
-    risk_level=RiskLevel.WRITE,
-    category="management",
-    executor=_exec_remove_essence,
-))
-_tool_defs.append(ToolDef(
     name="react_emoji",
-    description="对一条消息进行表情反应/点赞",
+    description="添加或取消一条消息的表情反应/点赞",
     parameters={
         "type": "object",
         "properties": {
             "message_id": {"type": "integer", "description": "要反应的消息ID"},
             "emoji_id": {"type": "integer", "description": "系统emoji的Unicode码点值，例如点赞=128077"},
+            "enabled": {"type": "boolean", "description": "true=添加，false=取消；默认true"},
         },
         "required": ["message_id", "emoji_id"],
     },
@@ -435,18 +416,6 @@ _tool_defs.append(ToolDef(
     risk_level=RiskLevel.READ_ONLY,
     category="query",
     executor=_exec_query_history,
-))
-_tool_defs.append(ToolDef(
-    name="tool_help",
-    description="获取所有可用工具的参数说明和使用示例。不确定某个工具怎么用或参数含义时调用此工具。也可用 tool_name=\"chain_guide\" 查看工具链式调用指南，用 tool_name=\"decision_guide\" 查看常见任务的工具组合建议。",
-    parameters={
-        "type": "object",
-        "properties": {"tool_name": {"type": "string", "description": "可选，指定工具名查看单个工具详情。不传则列出全部工具概览。"}},
-        "required": [],
-    },
-    risk_level=RiskLevel.READ_ONLY,
-    category="cognition",
-    executor=_exec_tool_help,
 ))
 _tool_defs.append(ToolDef(
     name="resolve_forward",
@@ -562,7 +531,7 @@ _tool_defs.append(ToolDef(
 ))
 _tool_defs.append(ToolDef(
     name="send_poke",
-    description="戳一戳群成员，用于轻量互动或吸引注意。",
+    description="在当前群聊或私聊中戳一戳用户，用于轻量互动或吸引注意。",
     parameters={
         "type": "object",
         "properties": {"user_id": {"type": "integer", "description": "要戳的用户QQ号"}},
@@ -610,18 +579,6 @@ _tool_defs.append(ToolDef(
     risk_level=RiskLevel.READ_ONLY,
     category="perception",
     executor=_exec_voice_to_text,
-))
-_tool_defs.append(ToolDef(
-    name="think",
-    description="在执行复杂操作前梳理思路。常用于需要多步推理的场景：分析问题→收集信息→决策→执行。详细的工具链式调用指南请见 tool_help(tool_name=\"chain_guide\")。思考内容仅自己可见。",
-    parameters={
-        "type": "object",
-        "properties": {"reasoning": {"type": "string", "description": "思考过程，包括分析步骤、需要哪些信息、预期结果"}},
-        "required": ["reasoning"],
-    },
-    risk_level=RiskLevel.READ_ONLY,
-    category="cognition",
-    executor=_exec_think,
 ))
 _tool_defs.append(ToolDef(
     name="query_character",
@@ -716,260 +673,6 @@ async def _resolve_forward(forward_id: str, bot, depth: int = 0) -> str:
     return f"{label}\n" + "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# tool_help helpers
-# ---------------------------------------------------------------------------
-
-
-_HELP_TEXTS = {
-    "set_essence": {
-        "desc": "将一条消息设为群精华消息",
-        "params": [
-            ("message_id", "integer", "是", "要设精的消息ID"),
-        ],
-        "example": 'set_essence(message_id=12345) — 将消息12345设为精华',
-    },
-    "remove_essence": {
-        "desc": "取消一条群精华消息",
-        "params": [
-            ("message_id", "integer", "是", "要取消精华的消息ID"),
-        ],
-        "example": 'remove_essence(message_id=12345) — 取消消息12345的精华',
-    },
-    "react_emoji": {
-        "desc": "对一条消息进行表情反应/点赞",
-        "params": [
-            ("message_id", "integer", "是", "要反应的消息ID"),
-            ("emoji_id", "integer", "是", "系统emoji的Unicode码点值，点赞=128077"),
-        ],
-        "example": "react_emoji(message_id=12345, emoji_id=128077) — 给消息12345点赞",
-    },
-    "send_message": {
-        "desc": "发送消息到当前群聊或私聊",
-        "params": [
-            ("text", "string", "是", "要发送的消息内容"),
-        ],
-        "example": "send_message(text=\"同学们早上好\") — 发送一条消息",
-    },
-    "mute_user": {
-        "desc": "禁言群成员",
-        "params": [
-            ("user_id", "integer", "是", "要禁言的用户QQ号"),
-            ("duration", "integer", "是", "禁言时长(秒)，0=解除禁言"),
-        ],
-        "example": "mute_user(user_id=123456, duration=600) — 禁言用户10分钟",
-    },
-    "kick_user": {
-        "desc": "踢出群成员",
-        "params": [
-            ("user_id", "integer", "是", "要踢出的用户QQ号"),
-        ],
-        "example": "kick_user(user_id=123456) — 将用户踢出群",
-    },
-    "get_current_time": {
-        "desc": "获取当前日期时间 (YYYY-MM-DD HH:MM:SS)",
-        "params": [],
-        "example": "get_current_time() — 返回当前时间，查询时间段前应先调用",
-    },
-    "query_history": {
-        "desc": "查询聊天记录，默认返回当前群最近30条消息（含bot）",
-        "params": [
-            ("message_id", "integer", "否", "精确查找指定消息ID"),
-            ("keyword", "string", "否", "搜索关键词，模糊匹配消息内容"),
-            ("user_id", "integer", "否", "只查特定用户的消息"),
-            ("limit", "integer", "否", "返回条数，默认30，最多50"),
-            ("time_after", "string", "否", "开始时间，格式 YYYY-MM-DD HH:MM:SS"),
-            ("time_before", "string", "否", "结束时间，格式 YYYY-MM-DD HH:MM:SS"),
-            ("bot_scope", "string", "否", "include(默认)/exclude(排除bot)/only(仅bot)"),
-        ],
-        "example": "query_history() — 查最近消息\nquery_history(keyword=\"作业\") — 搜索含「作业」的消息\nquery_history(time_after=\"2026-07-20 10:00:00\", time_before=\"2026-07-20 15:00:00\") — 查时间范围",
-    },
-    "tool_help": {
-        "desc": "获取所有可用工具的参数说明和使用示例",
-        "params": [
-            ("tool_name", "string", "否", "指定工具名查看详情，不传列出全部概览"),
-        ],
-        "example": "tool_help() — 列出所有工具\ntool_help(tool_name=\"query_history\") — 查看query_history详情",
-    },
-    "resolve_forward": {
-        "desc": "解析合并转发消息内容，支持嵌套转发",
-        "params": [
-            ("forward_id", "string", "是", "合并转发ID，从消息中的 [合并转发 xxx] 获取"),
-        ],
-        "example": "resolve_forward(forward_id=\"abc123\") — 解析该转发消息的具体对话内容",
-    },
-    "get_group_info": {
-        "desc": "获取群聊详细信息（群名、人数、创建时间等）",
-        "params": [],
-        "example": "get_group_info() — 返回当前群的基本信息",
-    },
-    "get_member_info": {
-        "desc": "查询群成员的群名片、QQ、角色",
-        "params": [
-            ("user_id", "integer", "是", "要查询的用户QQ号"),
-        ],
-        "example": "get_member_info(user_id=123456) — 查询该用户的群身份信息",
-    },
-    "get_member_list": {
-        "desc": "获取群成员完整列表（返回摘要，最多显示前100人）",
-        "params": [],
-        "example": "get_member_list() — 列出群成员概况",
-    },
-    "get_essence_list": {
-        "desc": "获取群精华消息列表",
-        "params": [],
-        "example": "get_essence_list() — 查看群里的精华消息",
-    },
-    "get_shut_list": {
-        "desc": "获取当前被禁言的成员列表",
-        "params": [],
-        "example": "get_shut_list() — 查看谁被禁言了",
-    },
-    "set_group_card": {
-        "desc": "修改群成员群名片",
-        "params": [
-            ("user_id", "integer", "是", "目标用户QQ号"),
-            ("card", "string", "是", "新群名片内容，空字符串=清除"),
-        ],
-        "example": "set_group_card(user_id=123456, card=\"新昵称\") — 修改某人的群名片",
-    },
-    "delete_msg": {
-        "desc": "撤回消息（需bot是管理员才能撤回他人消息）",
-        "params": [
-            ("message_id", "integer", "是", "要撤回的消息ID"),
-        ],
-        "example": "delete_msg(message_id=12345) — 撤回该消息",
-    },
-    "whole_ban": {
-        "desc": "全员禁言/解禁（需bot是群主）",
-        "params": [
-            ("enable", "boolean", "是", "true=开启全员禁言，false=关闭"),
-        ],
-        "example": "whole_ban(enable=true) — 开启全员禁言",
-    },
-    "set_admin": {
-        "desc": "设置/取消管理员（需bot是群主）",
-        "params": [
-            ("user_id", "integer", "是", "目标用户QQ号"),
-            ("enable", "boolean", "是", "true=设为管理，false=取消管理"),
-        ],
-        "example": "set_admin(user_id=123456, enable=true) — 将该用户设为管理员",
-    },
-    "send_poke": {
-        "desc": "戳一戳群成员",
-        "params": [
-            ("user_id", "integer", "是", "要戳的用户QQ号"),
-        ],
-        "example": "send_poke(user_id=123456) — 戳一下这个用户",
-    },
-    "send_like": {
-        "desc": "给用户点赞（私聊场景）",
-        "params": [
-            ("user_id", "integer", "是", "要对其点赞的用户QQ号"),
-            ("times", "integer", "否", "点赞次数，默认1，不超过10"),
-        ],
-        "example": "send_like(user_id=123456, times=3) — 给该用户点3个赞",
-    },
-    "ocr_image": {
-        "desc": "OCR识别图片中的文字（仅Windows端NapCat支持）",
-        "params": [
-            ("image", "string", "是", "图片路径、URL或Base64"),
-        ],
-        "example": "ocr_image(image=\"http://example.com/img.png\") — 识别图片文字",
-    },
-    "voice_to_text": {
-        "desc": "语音转文字",
-        "params": [
-            ("message_id", "integer", "是", "语音消息的消息ID"),
-        ],
-        "example": "voice_to_text(message_id=12345) — 将语音消息转为文字",
-    },
-    "think": {
-        "desc": "梳理思路，规划复杂操作步骤。结果仅自己可见。",
-        "params": [
-            ("reasoning", "string", "是", "思考内容：分析问题、需要哪些信息、分几步执行"),
-        ],
-        "example": "think(reasoning=\"我需要找出谁发了广告。1. 查询最近消息中的广告关键词 2. 找出违规用户 3. 按规则处理\") — 多步推理前先思考",
-    },
-    "query_character": {
-        "desc": "查询人物设定、世界观、关系、魔法、历史等背景知识",
-        "params": [
-            ("keyword", "string", "是", "查询关键词，如人名(辛美尔/菲伦)、魔法名、章节名等"),
-        ],
-        "example": "query_character(keyword=\"辛美尔\") — 查询辛美尔的详细设定\nquery_character(keyword=\"魔法\") — 查询魔法体系介绍",
-    },
-    # -- sandbox tools --
-    "sandbox_exec": {
-        "desc": "在沙箱Linux容器中执行任意命令（Python、Shell等），可运行代码、安装pip包",
-        "params": [
-            ("command", "string", "是", "要执行的shell命令，如 'python script.py' 或 'pip install requests'"),
-            ("timeout", "integer", "否", "超时秒数，默认30，最大60"),
-        ],
-        "example": "sandbox_exec(command=\"python -c 'print(1+1)'\") — 执行Python代码\nsandbox_exec(command=\"pip install numpy && python calc.py\") — 安装依赖并运行脚本",
-    },
-    "sandbox_write": {
-        "desc": "将UTF-8文本写入沙箱 /workspace 目录，自动创建父目录，单文件限制1MB",
-        "params": [
-            ("path", "string", "是", "相对于 /workspace 的文件路径，如 'script.py'"),
-            ("content", "string", "是", "UTF-8 文本内容"),
-        ],
-        "example": "sandbox_write(path=\"hello.py\", content=\"print('hello')\") — 写入Python脚本",
-    },
-    "sandbox_read": {
-        "desc": "从沙箱读取文件内容，限制500KB",
-        "params": [
-            ("path", "string", "是", "相对于 /workspace 的文件路径，如 'output.txt'"),
-        ],
-        "example": "sandbox_read(path=\"result.csv\") — 读取结果文件",
-    },
-    "sandbox_list": {
-        "desc": "列出沙箱 /workspace 目录下的文件",
-        "params": [
-            ("path", "string", "否", "子目录路径，默认 '' 即根目录"),
-        ],
-        "example": "sandbox_list() — 列出 workspace 根目录\nsandbox_list(path=\"data\") — 列出 data 子目录",
-    },
-    "sandbox_delete": {
-        "desc": "删除沙箱中的文件/目录（DESTRUCTIVE，仅管理员）",
-        "params": [
-            ("path", "string", "是", "相对于 /workspace 的路径"),
-        ],
-        "example": "sandbox_delete(path=\"temp/old.txt\") — 删除临时文件",
-    },
-}
-
-
-# ---------------------------------------------------------------------------
-# Non-tool guide texts (accessible via tool_help)
-# ---------------------------------------------------------------------------
-
-_GUIDE_TEXTS = {
-    "chain_guide": {
-        "desc": "工具链式调用指南",
-        "content": (
-            "复杂操作按「分析→收集信息→决策→执行」流程：\n"
-            "- 需要多步推理时，先调用 think(reasoning=\"...\") 梳理步骤\n"
-            "- 不了解群组状况时，先调用查询工具获取上下文（如 get_member_list + get_essence_list + get_shut_list）\n"
-            "- 不知道对方身份时，先调用 get_member_info 确认角色\n"
-            "- 需要证据时，先调用 query_history 搜索相关消息，再执行操作\n"
-            "- 操作完成后可视情况用 send_message 通知结果"
-        ),
-    },
-    "decision_guide": {
-        "desc": "常见任务工具组合建议",
-        "content": (
-            "- 群状况概览 → get_group_info + get_member_list + get_essence_list\n"
-            "- 查某人 → get_member_info(user_id) + query_history(user_id)\n"
-            "- 处理违规 → think → query_history(关键词) → mute_user / kick_user / delete_msg\n"
-            "- 精华操作 → set_essence / remove_essence，需提供消息ID\n"
-            "- 改名片 → set_group_card(user_id, card)\n"
-            "- 语音/图片 → voice_to_text / ocr_image 获取内容后再回答"
-        ),
-    },
-}
-
-
-# ---------------------------------------------------------------------------
 # Character lore query (query_character tool)
 # ---------------------------------------------------------------------------
 
@@ -1085,37 +788,3 @@ def _truncate_content(text: str, limit: int = 1500) -> str:
     if len(text) <= limit:
         return text
     return text[:limit].rsplit("\n", 1)[0] + "\n\n...(内容较长已截断，可缩小查询范围或查询子章节)"
-
-
-def _help_all() -> dict:
-    lines = ["可用工具一览：\n"]
-    lines.append("【查询】get_current_time / query_history / get_group_info / get_member_info / get_member_list / get_essence_list / get_shut_list")
-    lines.append("【管理】set_essence / remove_essence / mute_user / kick_user / set_group_card / delete_msg / whole_ban / set_admin")
-    lines.append("【互动】send_message / react_emoji(点赞128077,笑哭128514,心10084) / send_poke / send_like")
-    lines.append("【感知】ocr_image(仅Windows) / voice_to_text / resolve_forward")
-    lines.append("【沙箱】sandbox_exec / sandbox_write / sandbox_read / sandbox_list / sandbox_delete")
-    lines.append("【辅助】think / tool_help / query_character")
-    lines.append(f"\n共 {len(_HELP_TEXTS)} 个工具。")
-    lines.append("查看某工具详情请用 tool_help(tool_name=\"xxx\")。")
-    lines.append("查看工具链式调用指南请用 tool_help(tool_name=\"chain_guide\")。")
-    lines.append("查看常见任务决策指南请用 tool_help(tool_name=\"decision_guide\")。")
-    return {"text": "\n".join(lines)}
-
-
-def _help_single(tool_name: str) -> dict:
-    guide = _GUIDE_TEXTS.get(tool_name)
-    if guide:
-        return {"text": f"**{tool_name}** — {guide['desc']}\n\n{guide['content']}"}
-
-    info = _HELP_TEXTS.get(tool_name)
-    if not info:
-        return {"text": f"未找到工具 {tool_name!r}。可用工具：{', '.join(_HELP_TEXTS)}。可用指南：{', '.join(_GUIDE_TEXTS)}"}
-    lines = [f"**{tool_name}** — {info['desc']}\n"]
-    if info["params"]:
-        lines.append("参数：")
-        for pname, ptype, preq, pdesc in info["params"]:
-            lines.append(f"  - {pname} ({ptype}, {preq}): {pdesc}")
-    else:
-        lines.append("参数：无")
-    lines.append(f"\n用例：{info['example']}")
-    return {"text": "\n".join(lines)}

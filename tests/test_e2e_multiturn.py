@@ -40,8 +40,8 @@ def _raw_at_msg(user_id=111, text="Hello", group_id=456, msg_id=1) -> dict:
 class TestMultiTurnScenarios:
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_think_query_action_chain(self, e2e_llm_bot):
-        """think → query_history → mute_user → final reply chain."""
+    async def test_query_action_chain(self, e2e_llm_bot):
+        """query_history → mute_user → final reply chain."""
         # Seed message store for query_history
         now = int(time.time())
         e2e_llm_bot.msg_store.record_bot_message(
@@ -56,15 +56,7 @@ class TestMultiTurnScenarios:
                 LlmResponse(
                     tool_calls=[
                         ToolCall(
-                            id="c1", name="think",
-                            arguments={"reasoning": "Check for spam, then mute"},
-                        )
-                    ]
-                ),
-                LlmResponse(
-                    tool_calls=[
-                        ToolCall(
-                            id="c2", name="query_history",
+                            id="c1", name="query_history",
                             arguments={"keyword": "product"},
                         )
                     ]
@@ -72,7 +64,7 @@ class TestMultiTurnScenarios:
                 LlmResponse(
                     tool_calls=[
                         ToolCall(
-                            id="c3", name="mute_user",
+                            id="c2", name="mute_user",
                             arguments={"user_id": 999, "duration": 600},
                         )
                     ]
@@ -108,7 +100,7 @@ class TestMultiTurnScenarios:
             e2e_llm_bot,
             [
                 LlmResponse(tool_calls=[ToolCall(id="c1", name="get_current_time", arguments={})]),
-                LlmResponse(tool_calls=[ToolCall(id="c2", name="think", arguments={"reasoning": "checking"})]),
+                LlmResponse(tool_calls=[ToolCall(id="c2", name="query_history", arguments={"limit": 1})]),
                 LlmResponse(tool_calls=[ToolCall(id="c3", name="get_current_time", arguments={})]),
                 # 4th call: forced final (no tools)
                 LlmResponse(text="Forced final reply."),

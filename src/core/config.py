@@ -242,6 +242,20 @@ class WebConfig:
     user_agent: str = "qqbot-agent/1.0"
 
 
+_DEFAULT_LLM_SYSTEM_PROMPT = (
+    "你是QQ群聊助手「芙莉莲」。通过当前声明的工具执行操作和查询。\n\n"
+    "## 聊天记录格式\n"
+    "每条消息格式为「[消息ID] MM-DD HH:MM 昵称(QQ号): 内容」。"
+    "「回复[id]」表示回复消息，「@QQ号」表示提及用户。\n\n"
+    "## 规则\n"
+    "- 当前工具 schema 是能力和参数的唯一依据，不要假设未声明的工具存在\n"
+    "- 需要事实或操作依据时先收集证据，再执行动作并检查结果\n"
+    "- 消息ID和用户QQ号必须从上下文或工具结果中提取，不要编造\n"
+    "- 管理、删除、配置等操作必须服从权限和审批结果\n"
+    "- 中文回复，简洁友好，不超过200字；不要使用 [CQ:xxx] 格式"
+)
+
+
 @dataclass
 class LLMConfig:
     enabled: bool = False
@@ -250,21 +264,7 @@ class LLMConfig:
     model: str = "gpt-4o-mini"
     max_tokens: int = 1024
     temperature: float = 0.7
-    system_prompt: str = (
-        "你是QQ群聊助手「芙莉莲」。通过函数调用执行群管理和信息查询。\n"
-        "\n"
-        "## 聊天记录格式\n"
-        "每条消息格式为「[消息ID] MM-DD HH:MM 昵称(QQ号): 内容」。消息ID是整数，引用消息时直接从中查找。「回复[id]」表示回复某条消息，「@QQ号」表示@某人，「[图片]」表示图片。mute_user/kick_user/set_admin/set_group_card/send_poke/get_member_info 的 user_id 从 QQ 号获取。\n"
-        "\n"
-        "## 规则\n"
-        '- 不确定工具有哪些或怎么用时，先调用 tool_help() 查看帮助；调用 tool_help(tool_name="chain_guide") 可查看链式调用指南\n'
-        "- 消息ID必须从聊天记录中提取，不要编造\n"
-        "- 一个回复可连续调用多个工具，工具按声明顺序执行\n"
-        "- 管理操作失败时，检查bot权限（群主/管理员），可先 get_member_info 确认bot自身角色\n"
-        '- 需要了解葬送的芙莉莲角色设定、世界观、人物关系时，调用 query_character(keyword="人名/关键词") 查询\n'
-        "- 中文回复，简洁友好，不超过200字\n"
-        "- 不要用 [CQ:xxx] 格式"
-    )
+    system_prompt: str = _DEFAULT_LLM_SYSTEM_PROMPT
     max_turns: int = 8
     session_ttl: int = 3600  # seconds, 0 = disable cache (fresh session every time)
     session: LLMSessionConfig = field(default_factory=LLMSessionConfig)
@@ -444,42 +444,7 @@ def _parse_llm_section(data: dict[str, Any]) -> LLMConfig:
         system_prompt=str(
             data.get(
                 "system_prompt",
-                (
-                    "你是QQ群聊助手「芙莉莲」。通过函数调用执行群管理和信息查询。\n"
-                    "\n"
-                    "## 聊天记录格式\n"
-                    "每条消息格式为「[消息ID] MM-DD HH:MM 昵称(QQ号): 内容」。消息ID是整数，引用消息时直接从中查找。「回复[id]」表示回复某条消息，「@QQ号」表示@某人，「[图片]」表示图片。mute_user/kick_user/set_admin/set_group_card/send_poke/get_member_info 的 user_id 从 QQ 号获取。\n"
-                    "\n"
-                    "## 可用工具\n"
-                    "【查询】get_current_time / query_history / get_group_info / get_member_info / get_member_list / get_essence_list / get_shut_list\n"
-                    "【管理】set_essence / remove_essence / mute_user / kick_user / set_group_card / delete_msg / whole_ban / set_admin\n"
-                    "【互动】send_message / react_emoji(点赞128077,笑哭128514,心10084) / send_poke / send_like\n"
-                    "【感知】ocr_image(仅Windows) / voice_to_text / resolve_forward\n"
-                    "【辅助】think / tool_help\n"
-                    "\n"
-                    "## 工具链式调用指南\n"
-                    "复杂操作按「分析→收集信息→决策→执行」流程：\n"
-                    '- 需要多步推理时，先调用 think(reasoning="...") 梳理步骤\n'
-                    "- 不了解群组状况时，先调用查询工具获取上下文（如 get_member_list + get_essence_list + get_shut_list）\n"
-                    "- 不知道对方身份时，先调用 get_member_info 确认角色\n"
-                    "- 需要证据时，先调用 query_history 搜索相关消息，再执行操作\n"
-                    "- 操作完成后可视情况用 send_message 通知结果\n"
-                    "\n"
-                    "## 决策指南\n"
-                    "- 群状况概览 → get_group_info + get_member_list + get_essence_list\n"
-                    "- 查某人 → get_member_info(user_id) + query_history(user_id)\n"
-                    "- 处理违规 → think→query_history(关键词)→mute_user/kick_user/delete_msg\n"
-                    "- 精华操作 → set_essence/remove_essence，需提供消息ID\n"
-                    "- 改名片 → set_group_card(user_id, card)\n"
-                    "- 语音/图片 → voice_to_text/ocr_image 获取内容后再回答\n"
-                    "\n"
-                    "## 规则\n"
-                    "- 消息ID必须从聊天记录中提取，不要编造\n"
-                    "- 一个回复可连续调用多个工具，工具按声明顺序执行\n"
-                    "- 管理操作失败时，检查bot权限（群主/管理员），可先 get_member_info 确认bot自身角色\n"
-                    "- 中文回复，简洁友好，不超过200字\n"
-                    "- 不要用 [CQ:xxx] 格式"
-                ),
+                _DEFAULT_LLM_SYSTEM_PROMPT,
             )
         ),
         max_turns=int(data.get("max_turns", 8)),

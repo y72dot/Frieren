@@ -1,8 +1,8 @@
 # LLM 工具与插件系统分离重构方案书
 
-> 状态：执行中  
-> 编制日期：2026-07-22  
-> 范围：LLM Tool Platform、LLM 插件适配层、工具清单与 Prompt  
+> 状态：代码重构完成，待真实 NapCat 验收
+> 编制日期：2026-07-22
+> 范围：LLM Tool Platform、LLM 插件适配层、工具清单与 Prompt
 > 原则：渐进迁移、行为兼容、每阶段可独立回滚
 
 ## 1. 背景与基线
@@ -26,7 +26,7 @@
 2. 工具注册只经过一个核心 composition root，Bot 不感知具体 Provider。
 3. 工具只通过 `AgentLoop -> ToolExecutor` 执行，MessageBus 不承担工具 RPC。
 4. 注册全集与单次模型可见工具集分离。
-5. 普通对话每轮默认暴露 6～12 个工具，而不是完整目录。
+5. 普通对话每轮默认暴露 5～10 个工具，而不是完整目录。
 6. 展示过滤和执行授权共享同一策略语义，执行阶段继续二次校验。
 7. 工具 schema 成为能力说明的唯一事实源。
 8. 保持现有 NapCat、MessageBus 和自研插件架构，不引入新框架。
@@ -58,17 +58,19 @@ QQ Event
 目标目录：
 
 ```text
-src/core/llm/tools/
-  bootstrap.py
-  selector.py
-  view.py
-  providers/
-    qq.py
-    artifact.py
-    capability.py
-    control.py
-    schedule.py
-    sandbox.py
+src/core/llm/
+  tool_selector.py
+  tool_view.py
+  tool_metrics.py
+  tools/
+    bootstrap.py
+    providers/
+      qq.py
+      artifact.py
+      capability.py
+      control.py
+      schedule.py
+      sandbox.py
 
 plugins/
   llm_gate.py
@@ -232,8 +234,8 @@ ToolSelector.select(
 | 阶段一：边界和组装 | 已完成 | Provider 包、bootstrap、兼容入口 |
 | 阶段二：单一执行链 | 已完成 | LlmAgentService、删除工具 RPC |
 | 阶段三：动态 ToolView | 已完成 | Selector、权限可见性、工具包 |
-| 阶段四：工具精简 | 未开始 | 删除、合并、按需加载 |
-| 阶段五：质量收口 | 未开始 | Prompt 收口、指标、兼容层删除 |
+| 阶段四：工具精简 | 已完成 | 能力审计、双向动作合并、重复工具删除 |
+| 阶段五：质量收口 | 已完成（待真实 NapCat 验收） | Prompt、指标、兼容层和测试收口 |
 
 ### 阶段一执行记录（2026-07-22）
 
@@ -270,3 +272,29 @@ ToolSelector.select(
 - ToolExecutor 权限检查同步执行 contexts 和 audiences，隐藏能力不能通过伪造调用绕过。
 - Skill 默认渐进加载，可由名称、描述或自定义 intents 激活。
 - 验证结果：全量自动化测试通过，706 passed、2 skipped。
+
+### 阶段四执行记录（2026-07-22）
+
+- 审计 `llms.txt` 的 NapCat API 索引，并抽查官方 schema：文件获取、URL、上传已由 QQFileGateway 和 Artifact 工具覆盖，无需暴露原始文件 API。
+- `set_essence(message_id, enabled)` 统一设置/取消精华，删除 `remove_essence`。
+- `react_emoji(message_id, emoji_id, enabled)` 统一添加/取消表情回应。
+- `send_poke` 使用 NapCat `group_poke` 统一 action，同时支持群聊和私聊。
+- 删除与 `query_history` 重复的 `search_messages`，保留覆盖同步、时间和消息 ID 查询的实现。
+- 删除复述 schema 的 `tool_help` 和无业务效果的 `think`；相应帮助表和硬编码 Prompt 已清理。
+- Sandbox 工具从 exec/read/write/list/delete 收敛为 `sandbox_exec` 与独立审计的 `sandbox_delete`。
+- 账号凭据、退出/重启、原始包、群文件删除等敏感能力未暴露；相册、公告、待办、群文件管理留作后续按需工具包。
+- 常驻注册数从 54 降到 50，启用 Sandbox 从 59 降到 52；普通群聊可见 7 个、私聊 5 个。
+- 普通群聊 schema 从阶段三的 3941 bytes 继续降至 3465 bytes，相对最初 20401 bytes 减少 83.0%。
+- 验证结果：生产代码 Ruff 通过；全量自动化测试 692 passed、18 skipped。
+
+### 阶段五执行记录（2026-07-22）
+
+- 默认 System Prompt 收敛为单一常量，删除配置加载路径中的第二份工具清单、链式调用示例和决策表。
+- `tool_policy.md` 仅保留 schema 优先、证据、权限、副作用、错误处理和秘密保护等跨工具规则。
+- 删除 `plugins/llm_tools.py`、artifact/capability/control/schedule/sandbox 五个同类兼容别名；插件目录不再包含 Tool Provider。
+- 所有测试直接引用 `src/core/llm/tools/providers`；删除阶段四遗留的 16 个旧工具 skip 测试。
+- 固定工具总数断言改为 Provider 能力契约、ToolView、受众和权限边界断言。
+- 新增进程内 `ToolMetrics`：注册数、平均可见数、平均 schema 字节、工具调用轮数、首个/总体选择命中率、平均每轮调用数、执行数、权限拒绝率和未知工具率。
+- 当前默认 System Prompt 为 674 bytes；普通群聊 ToolView 为 7 个工具、3465 schema bytes。
+- `AGENTS.md` 保持 99 行，并补充 ToolMetrics 架构职责。
+- 验证结果：相关代码 Ruff 通过；全量自动化测试 694 passed、2 skipped。真实 NapCat 行为验收需在连接实例后执行。

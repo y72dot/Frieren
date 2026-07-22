@@ -221,7 +221,8 @@ def test_bot_tool_platform_is_instance_scoped_and_rebinds(bot_config):
     first.msg_store = replacement
     first.ensure_tool_platform()
     assert first.invocation_store.connection is replacement.connection
-    assert first.tool_catalog.count == 54
+    assert first.tool_catalog.get("first_only") is None
+    assert first.tool_catalog.get("query_history") is not None
 
 
 def test_catalog_assigns_effect_and_idempotency_defaults():

@@ -60,7 +60,6 @@ class TestLlmAgentService:
             "react_emoji",
             "get_current_time",
             "query_history",
-            "tool_help",
             "resolve_forward",
             "get_group_info",
             "get_member_info",

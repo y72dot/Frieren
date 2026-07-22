@@ -28,7 +28,6 @@ _PACK_MEMBERS: dict[str, set[str]] = {
     "core": {
         "get_current_time",
         "query_history",
-        "tool_help",
         "react_emoji",
         "resolve_forward",
         "list_message_artifacts",
@@ -37,7 +36,6 @@ _PACK_MEMBERS: dict[str, set[str]] = {
     "group_read": {"get_member_list", "get_essence_list", "get_shut_list"},
     "moderation": {
         "set_essence",
-        "remove_essence",
         "mute_user",
         "kick_user",
         "set_group_card",
@@ -56,10 +54,8 @@ _PACK_MEMBERS: dict[str, set[str]] = {
         "send_artifact",
     },
     "knowledge": {"query_character"},
-    "cognition": {"think"},
     "search": {
         "query_history",
-        "search_messages",
         "search_artifacts",
         "search_workspace",
         "search_tasks",
@@ -91,16 +87,12 @@ _PACK_MEMBERS: dict[str, set[str]] = {
     },
     "sandbox": {
         "sandbox_exec",
-        "sandbox_write",
-        "sandbox_read",
-        "sandbox_list",
         "sandbox_delete",
     },
 }
 
 _GROUP_ONLY = {
     "set_essence",
-    "remove_essence",
     "mute_user",
     "kick_user",
     "get_group_info",
@@ -111,7 +103,6 @@ _GROUP_ONLY = {
     "set_group_card",
     "whole_ban",
     "set_admin",
-    "send_poke",
 }
 _PRIVATE_ONLY = {"send_like"}
 _ADMIN_AUDIENCE = _PACK_MEMBERS["moderation"] | _PACK_MEMBERS["control"] | _PACK_MEMBERS["sandbox"]

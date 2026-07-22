@@ -68,60 +68,6 @@ class TestLocalTools:
         assert len(result["datetime"]) == 19
         assert after == before  # No API calls
 
-    @pytest.mark.integration
-    @pytest.mark.asyncio
-    async def test_think(self, e2e_bot):
-        """think tool returns acknowledged True, no API calls."""
-        before = len(e2e_bot.api.calls)
-        results = await _run_tool(
-            e2e_bot,
-            [
-                ToolCall(
-                    id="c1",
-                    name="think",
-                    arguments={"reasoning": "I need to analyze this."},
-                )
-            ],
-        )
-        after = len(e2e_bot.api.calls)
-
-        result = _assert_tool_result(results, "c1", "acknowledged")
-        assert result["acknowledged"] is True
-        assert after == before
-
-    @pytest.mark.integration
-    @pytest.mark.asyncio
-    async def test_tool_help_all(self, e2e_bot):
-        """tool_help without tool_name lists all tools."""
-        before = len(e2e_bot.api.calls)
-        results = await _run_tool(
-            e2e_bot, [ToolCall(id="c1", name="tool_help", arguments={})]
-        )
-        after = len(e2e_bot.api.calls)
-
-        result = _assert_tool_result(results, "c1", "text")
-        assert "可用工具" in result["text"]
-        assert after == before
-
-    @pytest.mark.integration
-    @pytest.mark.asyncio
-    async def test_tool_help_single(self, e2e_bot):
-        """tool_help with tool_name gives detailed usage."""
-        results = await _run_tool(
-            e2e_bot,
-            [
-                ToolCall(
-                    id="c1",
-                    name="tool_help",
-                    arguments={"tool_name": "mute_user"},
-                )
-            ],
-        )
-        result = _assert_tool_result(results, "c1", "text")
-        assert "mute_user" in result["text"]
-        assert "禁言" in result["text"]
-
-    @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_unknown_tool_error(self, e2e_bot):
         """Unknown tool name returns error message."""
@@ -155,11 +101,11 @@ class TestManagementTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_remove_essence(self, e2e_bot):
-        """remove_essence calls delete_essence_msg API."""
+    async def test_disable_essence(self, e2e_bot):
+        """set_essence(enabled=False) calls delete_essence_msg API."""
         results = await _run_tool(
             e2e_bot,
-            [ToolCall(id="c1", name="remove_essence", arguments={"message_id": 9999})],
+            [ToolCall(id="c1", name="set_essence", arguments={"message_id": 9999, "enabled": False})],
         )
         _assert_tool_result(results, "c1")
         assert any(
@@ -312,6 +258,30 @@ class TestInteractionTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
+    async def test_remove_react_emoji(self, e2e_bot):
+        results = await _run_tool(
+            e2e_bot,
+            [
+                ToolCall(
+                    id="c1",
+                    name="react_emoji",
+                    arguments={
+                        "message_id": 1111,
+                        "emoji_id": 128077,
+                        "enabled": False,
+                    },
+                )
+            ],
+        )
+        _assert_tool_result(results, "c1")
+        assert any(
+            c.get("action") == "set_msg_emoji_like"
+            and c.get("params", {}).get("set") is False
+            for c in e2e_bot.api.calls
+        )
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_send_message_group(self, e2e_bot):
         """send_message in group context calls send_group_msg."""
         results = await _run_tool(
@@ -350,16 +320,35 @@ class TestInteractionTools:
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_send_poke(self, e2e_bot):
-        """send_poke calls send_group_poke."""
+        """send_poke calls NapCat's unified group_poke action."""
         results = await _run_tool(
             e2e_bot,
             [ToolCall(id="c1", name="send_poke", arguments={"user_id": 222})],
         )
         _assert_tool_result(results, "c1")
         assert any(
-            c.get("method") == "send_group_poke"
-            and c.get("group_id") == 456
-            and c.get("user_id") == 222
+            c.get("method") == "call_action"
+            and c.get("action") == "group_poke"
+            and c.get("params", {}).get("group_id") == 456
+            and c.get("params", {}).get("user_id") == 222
+            for c in e2e_bot.api.calls
+        )
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_send_poke_private(self, e2e_bot):
+        results = await _run_tool(
+            e2e_bot,
+            [ToolCall(id="c1", name="send_poke", arguments={"user_id": 222})],
+            group_id=None,
+            user_id=222,
+        )
+        _assert_tool_result(results, "c1")
+        assert any(
+            c.get("method") == "call_action"
+            and c.get("action") == "group_poke"
+            and "group_id" not in c.get("params", {})
+            and c.get("params", {}).get("target_id") == 222
             for c in e2e_bot.api.calls
         )
 

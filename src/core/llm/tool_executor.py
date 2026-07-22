@@ -13,6 +13,7 @@ from loguru import logger
 from src.core.llm.invocation_store import InvocationStore
 from src.core.llm.sandbox import RiskLevel
 from src.core.llm.tool_catalog import ToolCatalog, ToolDef
+from src.core.llm.tool_metrics import ToolMetrics
 from src.core.llm.tool_permissions import ToolCallContext, check_permission
 
 _audit_log = logger.bind(__log_channel="_audit")
@@ -27,11 +28,13 @@ class ToolExecutor:
         default_timeout: float = 30.0,
         invocation_store: InvocationStore | None = None,
         max_result_bytes: int = 262_144,
+        metrics: ToolMetrics | None = None,
     ) -> None:
         self.catalog = catalog
         self.default_timeout = default_timeout
         self.invocation_store = invocation_store
         self.max_result_bytes = max_result_bytes
+        self.metrics = metrics or ToolMetrics(registered=catalog.count)
         self._result_cache: dict[str, tuple[float, Any]] = {}
 
     async def execute(
@@ -41,8 +44,10 @@ class ToolExecutor:
         ctx: ToolCallContext,
         bot: Any,
     ) -> dict[str, Any]:
+        self.metrics.record_execution()
         tool = self.catalog.get(tool_name)
         if tool is None:
+            self.metrics.record_unknown()
             error = f"unknown tool: {tool_name}"
             invocation = self._begin_unknown(tool_name, args, ctx)
             self._finish(invocation, "invalid", error=error)
@@ -79,6 +84,7 @@ class ToolExecutor:
 
         allowed, reason = check_permission(tool, ctx)
         if not allowed:
+            self.metrics.record_denied()
             logger.warning(f"Tool '{tool_name}' denied: {reason}")
             self._finish(invocation, "denied", error=reason)
             return {"error": reason}

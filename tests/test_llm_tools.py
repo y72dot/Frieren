@@ -11,7 +11,7 @@ from src.core.llm import ToolCall
 
 class TestToolDefs:
     def test_all_tools_have_required_fields(self):
-        from plugins.llm_tools import TOOL_DEFS
+        from src.core.llm.tools.providers.qq import TOOL_DEFS
 
         for tool_def in TOOL_DEFS:
             assert tool_def["type"] == "function"
@@ -20,13 +20,15 @@ class TestToolDefs:
             assert "description" in fn
             assert "parameters" in fn
 
-    def test_tool_count(self):
-        from plugins.llm_tools import TOOL_DEFS
+    def test_qq_provider_contract(self):
+        from src.core.llm.tools.providers.qq import TOOL_DEFS
 
-        assert len(TOOL_DEFS) == 25
+        names = {item["function"]["name"] for item in TOOL_DEFS}
+        assert {"query_history", "set_essence", "react_emoji", "send_poke"} <= names
+        assert {"tool_help", "think", "remove_essence"}.isdisjoint(names)
 
     def test_all_tool_names_unique(self):
-        from plugins.llm_tools import TOOL_DEFS
+        from src.core.llm.tools.providers.qq import TOOL_DEFS
 
         names = [t["function"]["name"] for t in TOOL_DEFS]
         assert len(names) == len(set(names))
@@ -886,172 +888,6 @@ class TestQueryHistory:
         assert mock_query.call_args.kwargs["n"] == 5
 
 
-class TestToolHelp:
-    @pytest.mark.asyncio
-    async def test_help_all(self, bot):
-        """tool_help without args returns overview of all tools."""
-        from tests.tool_runner import execute_tool_calls as llm_tools_handler
-
-        response_buf: dict = {}
-        await llm_tools_handler(
-            {
-                "llm_type": "tool",
-                "tool_calls": [
-                    {"id": "h1", "function": {"name": "tool_help", "arguments": "{}"}}
-                ],
-                "response_buffer": response_buf,
-                "group_id": 123,
-                "user_id": 111,
-            },
-            bot,
-        )
-
-        text = response_buf["results"][0]["result"]["text"]
-        assert "可用工具一览" in text
-        assert "query_history" in text
-        assert "tool_help" in text
-        assert "set_essence" in text
-
-    @pytest.mark.asyncio
-    async def test_help_single(self, bot):
-        """tool_help with tool_name returns single tool details."""
-        from tests.tool_runner import execute_tool_calls as llm_tools_handler
-
-        response_buf: dict = {}
-        await llm_tools_handler(
-            {
-                "llm_type": "tool",
-                "tool_calls": [
-                    {"id": "h2", "function": {"name": "tool_help", "arguments": '{"tool_name": "query_history"}'}}
-                ],
-                "response_buffer": response_buf,
-                "group_id": 123,
-                "user_id": 111,
-            },
-            bot,
-        )
-
-        text = response_buf["results"][0]["result"]["text"]
-        assert "query_history" in text
-        assert "用例" in text
-        assert "keyword" in text
-
-    @pytest.mark.asyncio
-    async def test_help_unknown_tool(self, bot):
-        """tool_help with unknown tool_name returns error with suggestions."""
-        from tests.tool_runner import execute_tool_calls as llm_tools_handler
-
-        response_buf: dict = {}
-        await llm_tools_handler(
-            {
-                "llm_type": "tool",
-                "tool_calls": [
-                    {"id": "h3", "function": {"name": "tool_help", "arguments": '{"tool_name": "nonexistent"}'}}
-                ],
-                "response_buffer": response_buf,
-                "group_id": 123,
-                "user_id": 111,
-            },
-            bot,
-        )
-
-        text = response_buf["results"][0]["result"]["text"]
-        assert "未找到工具" in text
-
-    @pytest.mark.asyncio
-    async def test_help_tool_def_complete(self):
-        """tool_help is in TOOL_DEFS with proper structure."""
-        from plugins.llm_tools import TOOL_DEFS
-
-        help_def = next(t for t in TOOL_DEFS if t["function"]["name"] == "tool_help")
-        assert help_def["type"] == "function"
-        fn = help_def["function"]
-        assert "tool_name" in fn["parameters"]["properties"]
-        assert fn["parameters"]["required"] == []
-
-    @pytest.mark.asyncio
-    async def test_help_all_includes_new_tools(self, bot):
-        """tool_help --all lists new tools from four directions."""
-        from tests.tool_runner import execute_tool_calls as llm_tools_handler
-
-        response_buf: dict = {}
-        await llm_tools_handler(
-            {
-                "llm_type": "tool",
-                "tool_calls": [
-                    {"id": "hall", "function": {"name": "tool_help", "arguments": "{}"}}
-                ],
-                "response_buffer": response_buf,
-                "group_id": 123,
-                "user_id": 111,
-            },
-            bot,
-        )
-        text = response_buf["results"][0]["result"]["text"]
-        # 方向一
-        assert "get_group_info" in text
-        assert "get_member_list" in text
-        assert "get_essence_list" in text
-        assert "get_shut_list" in text
-        # 方向二
-        assert "set_group_card" in text
-        assert "delete_msg" in text
-        assert "whole_ban" in text
-        assert "set_admin" in text
-        # 方向三
-        assert "send_poke" in text
-        assert "send_like" in text
-        assert "ocr_image" in text
-        assert "voice_to_text" in text
-        # 方向四
-        assert "think" in text
-
-    @pytest.mark.asyncio
-    async def test_help_single_new_tool(self, bot):
-        """tool_help with a new tool name shows its details."""
-        from tests.tool_runner import execute_tool_calls as llm_tools_handler
-
-        response_buf: dict = {}
-        await llm_tools_handler(
-            {
-                "llm_type": "tool",
-                "tool_calls": [
-                    {"id": "hs1", "function": {"name": "tool_help", "arguments": '{"tool_name": "get_member_info"}'}}
-                ],
-                "response_buffer": response_buf,
-                "group_id": 123,
-                "user_id": 111,
-            },
-            bot,
-        )
-        text = response_buf["results"][0]["result"]["text"]
-        assert "get_member_info" in text
-        assert "user_id" in text
-        assert "用例" in text
-
-    @pytest.mark.asyncio
-    async def test_help_total_count(self, bot):
-        """tool_help --all shows correct total tool count."""
-        from tests.tool_runner import execute_tool_calls as llm_tools_handler
-
-        response_buf: dict = {}
-        await llm_tools_handler(
-            {
-                "llm_type": "tool",
-                "tool_calls": [
-                    {"id": "hcnt", "function": {"name": "tool_help", "arguments": "{}"}}
-                ],
-                "response_buffer": response_buf,
-                "group_id": 123,
-                "user_id": 111,
-            },
-            bot,
-        )
-        text = response_buf["results"][0]["result"]["text"]
-        assert "共 30 个工具" in text
-
-
-# ====================================================================
 # 方向一: 信息获取工具
 # ====================================================================
 
@@ -1749,7 +1585,7 @@ class TestSetAdmin:
 class TestSendPoke:
     @pytest.mark.asyncio
     async def test_basic(self, bot):
-        """send_poke calls bot.api.send_group_poke."""
+        """send_poke calls NapCat's unified group_poke action."""
         from tests.tool_runner import execute_tool_calls as llm_tools_handler
 
         response_buf: dict = {}
@@ -1765,10 +1601,13 @@ class TestSendPoke:
             },
             bot,
         )
-        calls = [c for c in bot.api.calls if c.get("method") == "send_group_poke"]
+        calls = [
+            c for c in bot.api.calls
+            if c.get("method") == "call_action" and c.get("action") == "group_poke"
+        ]
         assert len(calls) == 1
-        assert calls[0]["group_id"] == 123
-        assert calls[0]["user_id"] == 555
+        assert calls[0]["params"]["group_id"] == 123
+        assert calls[0]["params"]["user_id"] == 555
 
 
 class TestSendLike:
@@ -1895,68 +1734,16 @@ class TestVoiceToText:
 # ====================================================================
 
 
-class TestThink:
-    @pytest.mark.asyncio
-    async def test_basic(self, bot):
-        """think tool returns acknowledged=True."""
-        from tests.tool_runner import execute_tool_calls as llm_tools_handler
-
-        response_buf: dict = {}
-        await llm_tools_handler(
-            {
-                "llm_type": "tool",
-                "tool_calls": [
-                    {"id": "t1", "function": {"name": "think", "arguments": '{"reasoning": "我需要分析谁在发广告。步骤1: 查询最近消息。步骤2: 找出违规者。步骤3: 禁言。"}'}}
-                ],
-                "response_buffer": response_buf,
-                "group_id": 123,
-                "user_id": 111,
-            },
-            bot,
-        )
-        result = response_buf["results"][0]["result"]
-        assert result["acknowledged"] is True
-
-    @pytest.mark.asyncio
-    async def test_multiple_think_calls(self, bot):
-        """Multiple think calls in one dispatch are all executed."""
-        from tests.tool_runner import execute_tool_calls as llm_tools_handler
-
-        response_buf: dict = {}
-        await llm_tools_handler(
-            {
-                "llm_type": "tool",
-                "tool_calls": [
-                    {"id": "t2a", "function": {"name": "think", "arguments": '{"reasoning": "第一步"}'}},
-                    {"id": "t2b", "function": {"name": "think", "arguments": '{"reasoning": "第二步"}'}},
-                ],
-                "response_buffer": response_buf,
-                "group_id": 123,
-                "user_id": 111,
-            },
-            bot,
-        )
-        assert len(response_buf["results"]) == 2
-        assert response_buf["results"][0]["result"]["acknowledged"] is True
-        assert response_buf["results"][1]["result"]["acknowledged"] is True
-
-
-# ====================================================================
-# 方向五: 角色设定查询
-# ====================================================================
-
-
-class TestQueryCharacter:
     def test_tool_definition_exists(self):
         """query_character should be in TOOL_DEFS."""
-        from plugins.llm_tools import TOOL_DEFS
+        from src.core.llm.tools.providers.qq import TOOL_DEFS
 
         names = [td["function"]["name"] for td in TOOL_DEFS]
         assert "query_character" in names
 
     def test_query_by_character_name(self):
         """Query by a character name returns their description paragraph."""
-        import plugins.llm_tools as lt
+        from src.core.llm.tools.providers import qq as lt
 
         lt._CHARACTER_SECTIONS = None
         lt._CHARACTER_FULL_TEXT = None
@@ -1967,7 +1754,7 @@ class TestQueryCharacter:
 
     def test_query_by_section_title(self):
         """Query by section title returns that section."""
-        from plugins.llm_tools import _query_character
+        from src.core.llm.tools.providers.qq import _query_character
 
         result = _query_character("魔法介绍")
         assert len(result["text"]) > 200
@@ -1975,26 +1762,29 @@ class TestQueryCharacter:
 
     def test_query_no_match(self):
         """Unknown keyword returns helpful error message."""
-        from plugins.llm_tools import _query_character
+        from src.core.llm.tools.providers.qq import _query_character
 
         result = _query_character("不存在的关键词xyz")
         assert "未找到" in result["text"]
 
     def test_truncate_long_content(self):
         """Long content should be truncated with a note."""
-        from plugins.llm_tools import _truncate_content
+        from src.core.llm.tools.providers.qq import _truncate_content
 
         result = _truncate_content("x" * 2000)
         assert len(result) <= 1600
         assert "已截断" in result
 
-    def test_help_text_exists(self):
-        """query_character should have help text."""
-        from plugins.llm_tools import _help_single
+    def test_schema_describes_query(self):
+        from src.core.llm.tools.providers.qq import TOOL_DEFS
 
-        result = _help_single("query_character")
-        assert "人物设定" in result["text"]
-        assert "keyword" in result["text"]
+        schema = next(
+            item["function"]
+            for item in TOOL_DEFS
+            if item["function"]["name"] == "query_character"
+        )
+        assert "人物设定" in schema["description"]
+        assert "keyword" in schema["parameters"]["properties"]
 
     @pytest.mark.asyncio
     async def test_execute_integration(self, bot):

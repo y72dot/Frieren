@@ -18,24 +18,6 @@ async def _exec_sandbox_exec(args: dict, group_id: int | None, user_id: int | No
     )
 
 
-async def _exec_sandbox_write(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
-    """Write a UTF-8 text file into the sandbox workspace."""
-    return await bot.sandbox.write_file(
-        path=args["path"],
-        content=args["content"],
-    )
-
-
-async def _exec_sandbox_read(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
-    """Read a file from the sandbox workspace."""
-    return await bot.sandbox.read_file(path=args["path"])
-
-
-async def _exec_sandbox_list(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
-    """List directory contents in the sandbox workspace."""
-    return await bot.sandbox.list_dir(path=args.get("path", ""))
-
-
 async def _exec_sandbox_delete(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
     """Delete a file or directory in the sandbox workspace (admin only)."""
     return await bot.sandbox.delete_path(path=args["path"])
@@ -47,7 +29,7 @@ async def _exec_sandbox_delete(args: dict, group_id: int | None, user_id: int | 
 
 
 def register_sandbox_tools(catalog: ToolCatalog) -> None:
-    """Register the five sandbox tools into the shared :class:`ToolCatalog`."""
+    """Register the compact sandbox tools into the shared catalog."""
 
     catalog.register(ToolDef(
         name="sandbox_exec",
@@ -74,74 +56,6 @@ def register_sandbox_tools(catalog: ToolCatalog) -> None:
         risk_level=RiskLevel.WRITE,
         category="sandbox",
         executor=_exec_sandbox_exec,
-    ))
-
-    catalog.register(ToolDef(
-        name="sandbox_write",
-        description=(
-            "将UTF-8文本内容写入沙箱 /workspace 目录下的文件。"
-            "自动创建父目录。单文件限制1MB。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "相对于 /workspace 的文件路径，如 'script.py' 或 'data/notes.txt'",
-                },
-                "content": {
-                    "type": "string",
-                    "description": "UTF-8 文本内容",
-                },
-            },
-            "required": ["path", "content"],
-        },
-        risk_level=RiskLevel.WRITE,
-        category="sandbox",
-        executor=_exec_sandbox_write,
-    ))
-
-    catalog.register(ToolDef(
-        name="sandbox_read",
-        description=(
-            "从沙箱 /workspace 目录读取文件内容。"
-            "限制500KB，超出建议用 sandbox_exec 的 head/tail 等命令分段读取。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "相对于 /workspace 的文件路径，如 'output.txt'",
-                },
-            },
-            "required": ["path"],
-        },
-        risk_level=RiskLevel.READ_ONLY,
-        category="sandbox",
-        executor=_exec_sandbox_read,
-        cache_ttl=5.0,
-    ))
-
-    catalog.register(ToolDef(
-        name="sandbox_list",
-        description=(
-            "列出沙箱 /workspace 目录下的文件和子目录。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "相对于 /workspace 的子目录，默认 '' 即根目录",
-                },
-            },
-            "required": [],
-        },
-        risk_level=RiskLevel.READ_ONLY,
-        category="sandbox",
-        executor=_exec_sandbox_list,
-        cache_ttl=3.0,
     ))
 
     catalog.register(ToolDef(

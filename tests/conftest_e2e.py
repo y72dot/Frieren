@@ -52,7 +52,7 @@ def _reset_all_module_state() -> None:
     reset_aq()
 
     # Character doc cache
-    import plugins.llm_tools as lt
+    from src.core.llm.tools.providers import qq as lt
 
     lt._CHARACTER_SECTIONS = None
     lt._CHARACTER_FULL_TEXT = None

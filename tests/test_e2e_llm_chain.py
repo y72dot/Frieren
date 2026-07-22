@@ -109,12 +109,12 @@ class TestLLMChainBasic:
                         ToolCall(id="c1", name="get_current_time", arguments={}),
                         ToolCall(
                             id="c2",
-                            name="think",
-                            arguments={"reasoning": "Let me check"},
+                            name="query_history",
+                            arguments={"limit": 1},
                         ),
                     ]
                 ),
-                LlmResponse(text="Done thinking."),
+                LlmResponse(text="Done."),
             ],
         )
 
@@ -122,7 +122,7 @@ class TestLLMChainBasic:
         await dispatch_raw_event(e2e_llm_bot, raw)
 
         assert_api_called(
-            e2e_llm_bot, "send_group_msg", group_id=456, message="Done thinking."
+            e2e_llm_bot, "send_group_msg", group_id=456, message="Done."
         )
 
     @pytest.mark.llm
@@ -139,8 +139,8 @@ class TestLLMChainBasic:
                     tool_calls=[
                         ToolCall(
                             id="c2",
-                            name="think",
-                            arguments={"reasoning": "processing"},
+                            name="query_history",
+                            arguments={"limit": 1},
                         )
                     ]
                 ),

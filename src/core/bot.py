@@ -312,10 +312,12 @@ class Bot:
         from src.core.llm.invocation_store import InvocationStore
         from src.core.llm.tool_catalog import ToolCatalog
         from src.core.llm.tool_executor import ToolExecutor
+        from src.core.llm.tool_metrics import ToolMetrics
         from src.core.llm.tools import register_builtin_tools
 
         self.tool_catalog = ToolCatalog()
         register_builtin_tools(self.tool_catalog)
+        self.tool_metrics = ToolMetrics(registered=self.tool_catalog.count)
         self.invocation_store = (
             InvocationStore(self.msg_store.connection)
             if cfg is None or cfg.invocation_persist
@@ -325,6 +327,7 @@ class Bot:
             self.tool_catalog,
             default_timeout=cfg.default_timeout if cfg else 30.0,
             invocation_store=self.invocation_store,
+            metrics=self.tool_metrics,
             max_result_bytes=cfg.max_result_bytes if cfg else 262_144,
         )
 

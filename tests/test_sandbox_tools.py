@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # fixtures
 # ---------------------------------------------------------------------------
@@ -54,7 +53,7 @@ def bot_with_sandbox(mock_api_client, mock_sandbox_mgr) -> MagicMock:
 class TestSandboxExec:
     @pytest.mark.asyncio
     async def test_basic(self, bot_with_sandbox):
-        from plugins.llm_sandbox_tools import _exec_sandbox_exec
+        from src.core.llm.tools.providers.sandbox import _exec_sandbox_exec
 
         result = await _exec_sandbox_exec(
             {"command": "echo hello", "timeout": 30},
@@ -67,7 +66,7 @@ class TestSandboxExec:
 
     @pytest.mark.asyncio
     async def test_default_timeout(self, bot_with_sandbox):
-        from plugins.llm_sandbox_tools import _exec_sandbox_exec
+        from src.core.llm.tools.providers.sandbox import _exec_sandbox_exec
 
         await _exec_sandbox_exec(
             {"command": "python script.py"},
@@ -78,75 +77,6 @@ class TestSandboxExec:
         )
 
 
-# ---------------------------------------------------------------------------
-# sandbox_write
-# ---------------------------------------------------------------------------
-
-
-class TestSandboxWrite:
-    @pytest.mark.asyncio
-    async def test_basic(self, bot_with_sandbox):
-        from plugins.llm_sandbox_tools import _exec_sandbox_write
-
-        result = await _exec_sandbox_write(
-            {"path": "script.py", "content": "print('hi')"},
-            group_id=123, user_id=111, bot=bot_with_sandbox,
-        )
-        assert result["ok"] is True
-        bot_with_sandbox.sandbox.write_file.assert_called_once_with(
-            path="script.py", content="print('hi')",
-        )
-
-
-# ---------------------------------------------------------------------------
-# sandbox_read
-# ---------------------------------------------------------------------------
-
-
-class TestSandboxRead:
-    @pytest.mark.asyncio
-    async def test_basic(self, bot_with_sandbox):
-        from plugins.llm_sandbox_tools import _exec_sandbox_read
-
-        result = await _exec_sandbox_read(
-            {"path": "notes.txt"},
-            group_id=123, user_id=111, bot=bot_with_sandbox,
-        )
-        assert result["ok"] is True
-        bot_with_sandbox.sandbox.read_file.assert_called_once_with(
-            path="notes.txt",
-        )
-
-
-# ---------------------------------------------------------------------------
-# sandbox_list
-# ---------------------------------------------------------------------------
-
-
-class TestSandboxList:
-    @pytest.mark.asyncio
-    async def test_root(self, bot_with_sandbox):
-        from plugins.llm_sandbox_tools import _exec_sandbox_list
-
-        result = await _exec_sandbox_list(
-            {},
-            group_id=123, user_id=111, bot=bot_with_sandbox,
-        )
-        assert result["ok"] is True
-        bot_with_sandbox.sandbox.list_dir.assert_called_once_with(path="")
-
-    @pytest.mark.asyncio
-    async def test_subdir(self, bot_with_sandbox):
-        from plugins.llm_sandbox_tools import _exec_sandbox_list
-
-        await _exec_sandbox_list(
-            {"path": "data"},
-            group_id=123, user_id=111, bot=bot_with_sandbox,
-        )
-        bot_with_sandbox.sandbox.list_dir.assert_called_once_with(path="data")
-
-
-# ---------------------------------------------------------------------------
 # sandbox_delete
 # ---------------------------------------------------------------------------
 
@@ -154,7 +84,7 @@ class TestSandboxList:
 class TestSandboxDelete:
     @pytest.mark.asyncio
     async def test_basic(self, bot_with_sandbox):
-        from plugins.llm_sandbox_tools import _exec_sandbox_delete
+        from src.core.llm.tools.providers.sandbox import _exec_sandbox_delete
 
         result = await _exec_sandbox_delete(
             {"path": "temp/old.txt"},
@@ -172,39 +102,32 @@ class TestSandboxDelete:
 
 
 class TestRegisterSandboxTools:
-    def test_registers_five_tools(self):
+    def test_registers_compact_tools(self):
         from src.core.llm.tool_catalog import ToolCatalog
-        from plugins.llm_sandbox_tools import register_sandbox_tools
+        from src.core.llm.tools.providers.sandbox import register_sandbox_tools
 
         catalog = ToolCatalog()
         register_sandbox_tools(catalog)
 
         defs = catalog.get_all_defs()
-        assert len(defs) == 5
-
         names = {td["function"]["name"] for td in defs}
         assert names == {
             "sandbox_exec",
-            "sandbox_write",
-            "sandbox_read",
-            "sandbox_list",
             "sandbox_delete",
         }
 
     def test_delete_is_admin_only(self):
         from src.core.llm.tool_catalog import ToolCatalog
-        from plugins.llm_sandbox_tools import register_sandbox_tools
+        from src.core.llm.tools.providers.sandbox import register_sandbox_tools
 
         catalog = ToolCatalog()
         register_sandbox_tools(catalog)
 
         # sandbox_delete should be filtered for non-admins
-        all_defs = catalog.get_all_defs()
+        user_defs = catalog.get_defs(user_is_admin=False)
         admin_defs = catalog.get_defs(user_is_admin=True)
 
-        # All 5 should appear for admin
-        assert len(admin_defs) == 5
-
-        # Check that there are admin-only defs
+        user_names = {td["function"]["name"] for td in user_defs}
         admin_only_names = {td["function"]["name"] for td in admin_defs}
+        assert "sandbox_delete" not in user_names
         assert "sandbox_delete" in admin_only_names

@@ -106,6 +106,14 @@ class AgentLoop:
                 ),
             )
             tools = tool_view.schemas()
+            schema_bytes = len(
+                json.dumps(tools, ensure_ascii=False).encode("utf-8")
+            )
+            self.executor.metrics.record_view(
+                registered=self.catalog.count,
+                visible=len(tool_view),
+                schema_bytes=schema_bytes,
+            )
             session_log.tool_view(tool_view.names, tool_view.active_packs)
             logger.debug(
                 f"LLM tool view: session={session.session_key} "
@@ -145,6 +153,9 @@ class AgentLoop:
 
             # -- tool calls: execute and continue --
             session_log.tool_calls_result(response.tool_calls)
+            self.executor.metrics.record_tool_calls(
+                [call.name for call in response.tool_calls], set(tool_view.names)
+            )
             tool_call_count += len(response.tool_calls)
             assistant_tool_msg = _make_assistant_tool_msg(response.tool_calls)
             session.messages.append(assistant_tool_msg)
