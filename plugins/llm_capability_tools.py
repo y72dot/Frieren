@@ -65,7 +65,12 @@ async def _workspace_export(args, group_id, user_id, bot):
 async def _web_search(args, group_id, user_id, bot):
     bot.ensure_capability_services()
     results = await bot.web_client.search(args["query"], limit=args.get("limit", 10))
-    return {"results": [item.__dict__ for item in results], "untrusted": True}
+    return {
+        "query": args["query"],
+        "result_count": len(results),
+        "results": [item.__dict__ for item in results],
+        "untrusted": True,
+    }
 
 
 async def _web_fetch(args, group_id, user_id, bot):
@@ -169,7 +174,11 @@ _TOOLS = [
     ),
     ToolDef(
         name="web_search",
-        description="搜索公开网页，只返回搜索结果，不自动访问结果页面",
+        description=(
+            "搜索公开网页并返回经过相关性排序的标题、直接链接和摘要。"
+            "同一任务通常最多搜索两次；获得相关结果后应抓取最可信的两三个来源，"
+            "不要继续改写近义查询，也不要猜测搜索结果中不存在的网址。"
+        ),
         parameters={
             "type": "object",
             "properties": {

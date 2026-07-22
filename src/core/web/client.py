@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
+import html
 import ipaddress
+import re
 import socket
 import time
+import xml.etree.ElementTree as ET
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -53,7 +57,11 @@ class SafeWebClient:
         timeout: float = 20.0,
         max_response_bytes: int = 2_097_152,
         max_redirects: int = 3,
-        search_url: str = "https://html.duckduckgo.com/html/?q={query}",
+        search_url: str = "https://search.yahoo.com/search?p={query}",
+        news_search_url: str = (
+            "https://www.bing.com/news/search?format=rss&setlang={lang}"
+            "&cc={country}&mkt={market}&q={query}"
+        ),
         search_fallback_urls: list[str] | None = None,
         user_agent: str = "qqbot-agent/1.0",
         resolver: Resolver | None = None,
@@ -64,47 +72,69 @@ class SafeWebClient:
         self.max_response_bytes = max_response_bytes
         self.max_redirects = max_redirects
         self.search_url = search_url
+        self.news_search_url = news_search_url
         self.search_fallback_urls = list(
             search_fallback_urls
             if search_fallback_urls is not None
-            else ["https://www.bing.com/search?q={query}"]
+            else [
+                "https://www.bing.com/search?setlang={lang}&cc={country}"
+                "&mkt={market}&q={query}",
+                "https://html.duckduckgo.com/html/?q={query}",
+            ]
         )
         self.user_agent = user_agent
         self.resolver = resolver or _resolve
         self.transport = transport
 
     async def search(self, query: str, *, limit: int = 10) -> list[WebSearchResult]:
-        templates = list(dict.fromkeys([self.search_url, *self.search_fallback_urls]))
+        preferred = [self.news_search_url] if _is_news_query(query) else []
+        templates = list(
+            dict.fromkeys([*preferred, self.search_url, *self.search_fallback_urls])
+        )
         failures: list[str] = []
+        locale = _query_locale(query)
         for template in templates:
-            url = template.format(query=quote_plus(query))
+            url = template.format(query=quote_plus(query), **locale)
             try:
                 response, final_url, content = await self._request(
-                    url, allowed_mime={"text/html"}
+                    url,
+                    allowed_mime={
+                        "text/html",
+                        "text/xml",
+                        "application/xml",
+                        "application/rss+xml",
+                    },
                 )
-                del response
             except Exception as exc:
                 failures.append(f"{urlparse(url).hostname}: {exc}")
                 continue
-            parser = (
-                _BingSearchParser()
-                if "bing.com" in (urlparse(final_url).hostname or "")
-                else _SearchParser()
-            )
-            parser.feed(content.decode("utf-8", errors="replace"))
-            results = [
+            mime = response.headers.get("content-type", "").split(";", 1)[0].lower()
+            if "xml" in mime or "format=rss" in final_url:
+                raw_results = _parse_rss_results(content)
+            else:
+                hostname = urlparse(final_url).hostname or ""
+                if hostname.endswith("yahoo.com"):
+                    parser = _YahooSearchParser()
+                elif hostname.endswith("bing.com"):
+                    parser = _BingSearchParser()
+                else:
+                    parser = _SearchParser()
+                parser.feed(content.decode(response.encoding or "utf-8", errors="replace"))
+                raw_results = parser.results
+            candidates = [
                 WebSearchResult(
                     title=item[0],
                     url=_unwrap_result_url(item[1]),
                     snippet=item[2],
                     source=final_url,
                 )
-                for item in parser.results[:limit]
+                for item in raw_results
                 if item[0] and item[1]
             ]
+            results = _rank_search_results(query, candidates, limit)
             if results:
                 return results
-            failures.append(f"{urlparse(final_url).hostname}: no parseable results")
+            failures.append(f"{urlparse(final_url).hostname}: no relevant results")
         raise RuntimeError("web search providers unavailable: " + "; ".join(failures))
 
     async def fetch(self, url: str) -> WebDocument:
@@ -345,10 +375,178 @@ class _BingSearchParser(HTMLParser):
             self._snippet += data
 
 
+class _YahooSearchParser(HTMLParser):
+    """Extract Yahoo organic results without collecting sitelinks as results."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.results: list[tuple[str, str, str]] = []
+        self._result_depth = 0
+        self._capture_title = False
+        self._capture_snippet = False
+        self._href = ""
+        self._title = ""
+        self._snippet = ""
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = dict(attrs)
+        classes = set((values.get("class") or "").split())
+        if tag == "div" and not self._result_depth and "algo" in classes:
+            self._result_depth = 1
+            self._href = self._title = self._snippet = ""
+            return
+        if not self._result_depth:
+            return
+        if tag == "div":
+            self._result_depth += 1
+        elif tag == "a" and not self._href and "mt-38" in classes:
+            self._href = values.get("href") or ""
+        elif tag == "h3" and self._href:
+            self._capture_title = True
+        elif tag == "p" and not self._snippet and "mah-44" in classes:
+            self._capture_snippet = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if not self._result_depth:
+            return
+        if tag == "h3":
+            self._capture_title = False
+        elif tag == "p":
+            self._capture_snippet = False
+        elif tag == "div":
+            self._result_depth -= 1
+            if not self._result_depth and self._href and self._title.strip():
+                self.results.append(
+                    (self._title.strip(), self._href, self._snippet.strip())
+                )
+
+    def handle_data(self, data: str) -> None:
+        if self._capture_title:
+            self._title += data
+        if self._capture_snippet:
+            self._snippet += data
+
+
 def _unwrap_result_url(url: str) -> str:
     parsed = urlparse(url)
     target = parse_qs(parsed.query).get("uddg")
-    return unquote(target[0]) if target else url
+    if target:
+        return unquote(target[0])
+    if parsed.hostname and parsed.hostname.endswith("bing.com"):
+        encoded = parse_qs(parsed.query).get("u", [""])[0]
+        if encoded.startswith("a1"):
+            try:
+                payload = encoded[2:]
+                payload += "=" * (-len(payload) % 4)
+                decoded = base64.urlsafe_b64decode(payload).decode("utf-8")
+                if decoded.startswith(("http://", "https://")):
+                    return decoded
+            except (ValueError, UnicodeDecodeError):
+                pass
+    if parsed.hostname and parsed.hostname.endswith("search.yahoo.com"):
+        match = re.search(r"/RU=(.*?)/RK=", parsed.path)
+        if match:
+            decoded = unquote(match.group(1))
+            if decoded.startswith(("http://", "https://")):
+                return decoded
+    return url
+
+
+def _parse_rss_results(content: bytes) -> list[tuple[str, str, str]]:
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError:
+        return []
+    return [
+        (
+            html.unescape(item.findtext("title") or "").strip(),
+            (item.findtext("link") or "").strip(),
+            html.unescape(item.findtext("description") or "").strip(),
+        )
+        for item in root.findall(".//item")
+    ]
+
+
+def _query_locale(query: str) -> dict[str, str]:
+    if re.search(r"[\u3040-\u30ff]", query):
+        return {"lang": "ja-JP", "country": "JP", "market": "ja-JP"}
+    if re.search(r"[\u3400-\u9fff]", query):
+        return {"lang": "zh-CN", "country": "CN", "market": "zh-CN"}
+    return {"lang": "en-US", "country": "US", "market": "en-US"}
+
+
+def _is_news_query(query: str) -> bool:
+    normalized = query.casefold()
+    markers = (
+        "latest", "news", "today", "current", "recent", "release date",
+        "announcement", "schedule", "最新", "新闻", "今日", "近期", "发布",
+        "发布日期", "播出", "档期", "什么时候", "いつ", "最新情報", "放送",
+    )
+    return any(marker in normalized for marker in markers)
+
+
+def _rank_search_results(
+    query: str, results: list[WebSearchResult], limit: int
+) -> list[WebSearchResult]:
+    terms = _search_terms(query)
+    ranked: list[tuple[int, int, WebSearchResult]] = []
+    seen_urls: set[str] = set()
+    host_counts: dict[str, int] = {}
+    for index, result in enumerate(results):
+        canonical = result.url.rstrip("/")
+        if not canonical or canonical in seen_urls:
+            continue
+        title = result.title.casefold()
+        snippet = result.snippet.casefold()
+        url = result.url.casefold()
+        host = (urlparse(result.url).hostname or "").casefold()
+        matched = {term for term in terms if term in title or term in snippet or term in url}
+        if terms and not matched:
+            continue
+        score = sum(
+            (4 if term in title else 0)
+            + (2 if term in snippet else 0)
+            + (1 if term in url else 0)
+            for term in matched
+        )
+        # Prefer the entity's own domain over mirrors and API directories.  The
+        # path may repeat arbitrary query words, so only the hostname receives
+        # this authority signal.
+        score += sum(5 for term in matched if len(term) >= 3 and term in host)
+        if host.endswith((".gov", ".gov.cn", ".edu", ".edu.cn")):
+            score += 2
+        ranked.append((score, -index, result))
+        seen_urls.add(canonical)
+    ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    selected: list[WebSearchResult] = []
+    for _, _, result in ranked:
+        host = (urlparse(result.url).hostname or "").lower()
+        if host_counts.get(host, 0) >= 2:
+            continue
+        host_counts[host] = host_counts.get(host, 0) + 1
+        selected.append(result)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def _search_terms(query: str) -> set[str]:
+    ignored = {
+        "and", "or", "the", "a", "an", "of", "for", "to", "in",
+        "official", "latest", "news", "release", "date", "update",
+        "season", "information", "search", "2025", "2026",
+        "最新", "官方", "信息", "搜索", "播出", "第二季", "第2期", "2期",
+    }
+    normalized = query.casefold()
+    latin = {
+        token for token in re.findall(r"[a-z0-9][a-z0-9_-]{1,}", normalized)
+        if token not in ignored
+    }
+    cjk = {
+        token for token in re.findall(r"[\u3400-\u9fff\u3040-\u30ff]+", normalized)
+        if token not in ignored and len(token) >= 2
+    }
+    return latin | cjk
 
 
 def _validate_peer(response: httpx.Response) -> None:

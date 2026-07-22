@@ -428,11 +428,23 @@ class Bot:
             timeout=web_cfg.timeout if web_cfg else 20.0,
             max_response_bytes=web_cfg.max_response_bytes if web_cfg else 2_097_152,
             max_redirects=web_cfg.max_redirects if web_cfg else 3,
-            search_url=(web_cfg.search_url if web_cfg else "https://html.duckduckgo.com/html/?q={query}"),
+            search_url=(
+                web_cfg.search_url
+                if web_cfg
+                else "https://search.yahoo.com/search?p={query}"
+            ),
+            news_search_url=(
+                web_cfg.news_search_url
+                if web_cfg
+                else "https://www.bing.com/news/search?format=rss&setlang={lang}&cc={country}&mkt={market}&q={query}"
+            ),
             search_fallback_urls=(
                 web_cfg.search_fallback_urls
                 if web_cfg
-                else ["https://www.bing.com/search?q={query}"]
+                else [
+                    "https://www.bing.com/search?setlang={lang}&cc={country}&mkt={market}&q={query}",
+                    "https://html.duckduckgo.com/html/?q={query}",
+                ]
             ),
             user_agent=web_cfg.user_agent if web_cfg else "qqbot-agent/1.0",
         )
