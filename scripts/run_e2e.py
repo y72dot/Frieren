@@ -16,6 +16,7 @@ LEVELS: dict[str, list[str]] = {
     "L0": [
         "tests/test_config.py",
         "tests/test_config_center.py",
+        "tests/test_docker_contract.py",
         "tests/test_prompt_registry.py",
         "tests/test_qq_adapter.py",
     ],

@@ -22,7 +22,14 @@ htmlcov/
 
 # Environment & secrets
 .env
-config/
+config/*
+!config/bot.toml
+!config/frieren.md
+!config/performance_baseline.json
+!config/prompts/
+!config/prompts/**
+!config/skills/
+!config/skills/**
 instances/
 
 # Logs

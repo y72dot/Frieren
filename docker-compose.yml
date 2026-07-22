@@ -31,7 +31,9 @@ services:
       - bot-network
 
   qqbot-frieren:
-    build: .
+    build:
+      context: .
+      target: runtime
     container_name: qqbot-frieren
     restart: unless-stopped
     depends_on:
@@ -70,6 +72,7 @@ services:
     image: python:3.12-slim
     container_name: qqbot-sandbox
     restart: unless-stopped
+    command: ["sleep", "infinity"]
     working_dir: /workspace
     environment:
       - HOME=/workspace

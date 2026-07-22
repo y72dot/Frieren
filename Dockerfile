@@ -17,6 +17,7 @@ CMD ["python", "-m", "src.main"]
 FROM runtime AS test
 
 RUN pip install --no-cache-dir pytest pytest-asyncio
+COPY Dockerfile docker-compose.yml ./
 COPY config/ config/
 COPY tests/ tests/
 COPY scripts/ scripts/

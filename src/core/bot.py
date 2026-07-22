@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
+import time
 from pathlib import Path
 
 from loguru import logger
@@ -86,6 +87,10 @@ class Bot:
         self.health_monitor = HealthMonitor()
         self._health_task: asyncio.Task[None] | None = None
         self._health_started = False
+        self._last_event_success_at: float | None = None
+        self._last_event_error_at: float | None = None
+        self._consecutive_event_errors = 0
+        self._last_event_error = ""
         if config is not None:
             self._init_configuration_services(persistent=False)
 
@@ -562,7 +567,13 @@ class Bot:
                 break
             try:
                 await self.event_bus.dispatch(raw_event, self)
-            except Exception:
+                self._last_event_success_at = time.time()
+                self._consecutive_event_errors = 0
+                self._last_event_error = ""
+            except Exception as exc:
+                self._last_event_error_at = time.time()
+                self._consecutive_event_errors += 1
+                self._last_event_error = f"{type(exc).__name__}: {exc}"[:500]
                 ctx = f"type={type(raw_event).__name__}"
                 try:
                     uid = getattr(raw_event, "user_id", None) or (
@@ -599,7 +610,14 @@ class Bot:
     async def _heartbeat_loop(self) -> None:
         while self._running:
             self.health_monitor.write(
-                "running", napcat_connected=self.api._client is not None
+                "running",
+                napcat_connected=self.api._client is not None,
+                details={
+                    "last_event_success_at": self._last_event_success_at,
+                    "last_event_error_at": self._last_event_error_at,
+                    "consecutive_event_errors": self._consecutive_event_errors,
+                    "last_event_error": self._last_event_error,
+                },
             )
             await asyncio.sleep(10)
 

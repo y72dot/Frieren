@@ -48,3 +48,22 @@ def test_health_report_rejects_missing_heartbeat(tmp_path):
     report = check_health(tmp_path / "missing.json")
     assert report["healthy"] is False
     assert "heartbeat unreadable" in report["errors"][0]
+
+
+def test_health_report_rejects_repeated_event_dispatch_failures(tmp_path):
+    state = tmp_path / "health.json"
+    monitor = HealthMonitor(state)
+    monitor.write(
+        "running",
+        napcat_connected=True,
+        details={
+            "consecutive_event_errors": 3,
+            "last_event_error": "TypeError: cannot serialize event",
+        },
+    )
+
+    report = check_health(state, max_consecutive_event_errors=3)
+
+    assert report["healthy"] is False
+    assert report["consecutive_event_errors"] == 3
+    assert "event dispatch failed 3 consecutive times" in report["errors"][0]

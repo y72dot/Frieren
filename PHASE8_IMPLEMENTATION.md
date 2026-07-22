@@ -82,7 +82,11 @@ docker compose --profile test run --rm e2e
 
 该容器执行与主机一致的 L0–L5 矩阵，不连接真实 QQ，也不挂载 Docker Socket。
 
-本轮 `docker compose config --quiet` 已通过。实际镜像构建已启动并确认 Dockerfile 可被 BuildKit 读取，但本机没有 `python:3.12-slim` 缓存，Docker Hub token 请求网络超时，因此容器构建仍是外部待验收项。
+本轮 `docker compose config --quiet` 已通过。补齐基础镜像后，构建首先发现 `.dockerignore` 错误排除了测试所需的 `config/`；现已改为只放行 bot.toml、角色资料、性能基线、Prompt 和 Skill，不把 `.env` 或实例状态带入镜像。
+
+修正后 `qqbot-e2e:test` 和 Compose 的 `qqbot-e2e:latest` 均成功构建，项目 wheel、运行依赖和测试依赖在 Python 3.12 slim 镜像内安装成功。`docker compose --profile test run --rm e2e` 实际执行结果为 L0-L5 共 194 passed；Linux 下符号链接逃逸用例也已执行，不再条件跳过。
+
+由于 Dockerfile 的最后一个 stage 是 `test`，生产 Compose 还必须显式声明 `target: runtime`，否则默认构建会把 Bot 服务变成 E2E 运行器。该风险已修正并加入静态契约测试；`qqbot-qqbot-frieren:latest` 实际构建成功，镜像 CMD 已核验为 `["python", "-m", "src.main"]`。
 
 ## 7. Live NapCat 门禁
 
@@ -138,15 +142,17 @@ LLM 的旧 INTERNAL `response_buffer` 入口仍被既有工具级调用者和大
 
 自动化结果：
 
-- L0：23 passed；
+- L0：26 passed；
 - L1：18 passed；
 - L2：22 passed；
 - L3：27 passed；
 - L4：83 passed；
 - L5：17 passed、1 conditional skip；
-- 全量测试：679 passed、2 skipped；
+- 全量测试：682 passed、2 skipped；
 - 阶段八新增及修改 Python 文件 Ruff：通过；
 - Compose 配置解析：通过；
+- Docker test target 构建：通过；
+- Docker Compose L0-L5：194 passed；
 - 性能门禁：通过。
 
 两个 skip 的含义：
@@ -156,12 +162,11 @@ LLM 的旧 INTERNAL `response_buffer` 入口仍被既有工具级调用者和大
 
 ## 11. 生产切换状态
 
-代码、自动化 Harness 和 L0–L5 门禁已经完成，但当前版本尚未标记为“生产切换完成”。剩余外部门禁：
+代码、自动化 Harness、Docker 构建和容器内 L0–L5 门禁已经完成，但当前版本尚未标记为“生产切换完成”。剩余外部门禁：
 
-1. 在可访问 Docker Hub 或已有基础镜像缓存的环境完成 `test` target 构建和容器内 L0–L5；
-2. 由操作者在专用测试群明确授权并执行 L6；
-3. 在目标服务器执行一次容器重启、NapCat 断线重连和持久卷恢复演练。
+1. 由操作者在专用测试群明确授权并执行 L6；
+2. 在目标服务器执行一次容器重启、NapCat 断线重连和持久卷恢复演练。
 
-三项完成后，才能满足重构方案第 27 节的全部发布标准。
+两项完成后，才能满足重构方案第 27 节的全部发布标准。
 
 补充债务：全仓 `ruff check .` 仍报告 115 个阶段八之前已存在的告警，主要位于旧 E2E fixture、sandbox 测试和历史导入顺序。本阶段未对无关旧文件执行批量自动改写；生产放行前应单独建立 lint 清债变更。

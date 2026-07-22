@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import base64
 import os
 import time
+from pathlib import Path
 
 import pytest
 
@@ -28,14 +31,32 @@ async def test_live_napcat_login_send_and_history_contract():
         assert isinstance(login, dict) and login
         sent = await client.send_group_msg(group_id=group_id, message=marker)
         assert isinstance(sent, dict)
-        history = await client.get_group_msg_history(group_id=group_id, count=20)
-        assert marker in str(history)
+        for _ in range(15):
+            history = await client.get_group_msg_history(group_id=group_id, count=20)
+            if marker in str(history):
+                break
+            await asyncio.sleep(1)
+        else:
+            pytest.fail("sent message did not appear in group history within 15s")
 
         artifact = os.getenv("QQBOT_LIVE_ARTIFACT")
         if artifact:
+            path = Path(artifact)
+            assert path.is_file(), f"QQBOT_LIVE_ARTIFACT is not a file: {path}"
+            size = path.stat().st_size
+            assert size <= 10 * 1024 * 1024, "live acceptance artifact exceeds 10 MiB"
+            payload = "base64://" + base64.b64encode(path.read_bytes()).decode("ascii")
+            remote_name = f"qqbot-l6-{int(time.time())}-{path.name}"
             uploaded = await client.upload_group_file(
                 group_id=group_id,
-                file=artifact,
-                name=os.path.basename(artifact),
+                file=payload,
+                name=remote_name,
             )
             assert isinstance(uploaded, dict)
+            for _ in range(20):
+                files = await client.get_group_root_files(group_id=group_id)
+                if remote_name in str(files):
+                    break
+                await asyncio.sleep(1)
+            else:
+                pytest.fail("uploaded file did not appear in group files within 20s")

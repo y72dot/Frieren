@@ -16,8 +16,10 @@ def to_plain_data(value: Any) -> Any:
         return {str(k): to_plain_data(v) for k, v in value.items()}
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return [to_plain_data(item) for item in value]
-    if dataclasses.is_dataclass(value):
-        return to_plain_data(dataclasses.asdict(value))
+    # NapCat SDK events are dataclasses, but their public ``to_dict`` method
+    # returns the original OneBot payload.  Prefer explicit serializers before
+    # generic dataclass handling so private runtime fields such as ``_client``
+    # are neither copied nor leaked into the journal.
     for method_name in ("to_dict", "model_dump", "dict"):
         method = getattr(value, method_name, None)
         if callable(method):
@@ -25,6 +27,12 @@ def to_plain_data(value: Any) -> Any:
                 return to_plain_data(method())
             except (TypeError, ValueError):
                 continue
+    if dataclasses.is_dataclass(value):
+        return {
+            field.name: to_plain_data(getattr(value, field.name))
+            for field in dataclasses.fields(value)
+            if not field.name.startswith("_")
+        }
     raw_dict = getattr(value, "__dict__", None)
     if isinstance(raw_dict, dict):
         return {

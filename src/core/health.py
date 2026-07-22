@@ -42,6 +42,7 @@ def check_health(
     database: str | Path | None = None,
     max_age: float = 90.0,
     require_napcat: bool = False,
+    max_consecutive_event_errors: int = 3,
     now: float | None = None,
 ) -> dict[str, Any]:
     """Return a machine-readable health report without mutating runtime state."""
@@ -60,6 +61,16 @@ def check_health(
         errors.append(f"heartbeat age {age:.1f}s exceeds {max_age:.1f}s")
     if require_napcat and not state.get("napcat_connected"):
         errors.append("NapCat is not connected")
+    details = state.get("details")
+    if not isinstance(details, dict):
+        details = {}
+    consecutive_event_errors = int(details.get("consecutive_event_errors", 0) or 0)
+    if consecutive_event_errors >= max_consecutive_event_errors:
+        errors.append(
+            "event dispatch failed "
+            f"{consecutive_event_errors} consecutive times: "
+            f"{details.get('last_event_error', 'unknown error')}"
+        )
 
     database_status = "not_checked"
     if database is not None:
@@ -81,4 +92,5 @@ def check_health(
         "napcat_connected": bool(state.get("napcat_connected")),
         "database": database_status,
         "pid": state.get("pid"),
+        "consecutive_event_errors": consecutive_event_errors,
     }

@@ -94,6 +94,12 @@ spam_window = 5.0
 spam_actions = ["send_group_msg", "send_private_msg", "send_group_poke", "send_group_forward_msg", "set_group_ban", "set_group_kick"]
 
 [llm]
+enabled = true
+api_base = "https://api.deepseek.com"
+model = "deepseek-v4-flash"
+max_tokens = 1024
+temperature = 0.7
+max_turns = 8
 session_ttl = 3600
 system_prompt = '''
 你是芙莉莲，活了超过一千年、曾与勇者辛美尔一行人打倒魔王的精灵族魔法使。

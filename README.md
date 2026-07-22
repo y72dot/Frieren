@@ -1,325 +1,385 @@
 # qqbot
 
-基于 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 的自建 QQ 机器人框架。
+基于 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 的单一人格 QQ Agent。项目不依赖 NoneBot、AstrBot 或 Koishi，消息总线、插件系统、持久化运行时、工具平台和 Control Plane 均为自研实现。
 
-## 本地开发
+Bot 被设计为一个长期运行的完整个体，而不是多 Bot 平台：所有会话共享同一个 Bot 身份、配置中心、长期记忆和 Bot 自有工作空间，同时通过权限与会话范围控制数据访问。
 
-```bash
-# 安装依赖
-pip install -e .        # 从 pyproject.toml 安装
+## 当前能力
 
-# 配置
-cp .env.example .env    # 按需填写 API Key
-# 编辑 config/bot.toml  -- 填入 QQ 号、管理员、群白名单
-# 编辑 instances/napcat-frieren/config/onebot11_3632757457.json  -- 填入你的 QQ 号
+- 无损接收并保存 NapCat 原始事件、原始 CQ、`message_array` 和未知消息段；
+- 所有实时消息先写 SQLite，再进入过滤和插件分发链路；
+- 数据库优先查询消息和文件，NapCat 历史接口负责补齐 Bot 离线期间的数据；
+- Artifact Store 统一管理 QQ 文件、图片、语音、网页、下载结果和 Agent 创建的文件；
+- Agent 可搜索消息、Artifact、工作空间、任务、记忆和互联网；
+- Bot 自有安全工作空间支持创建、读取、搜索和导出文件；
+- Tool Platform 提供权限、Schema、超时、幂等、结果限制和 Invocation 审计；
+- Task、Run、Step 与 Scheduler 持久化，进程重启后按副作用安全策略恢复；
+- 设置、Prompt 和插件采用“提案 → 独立审批 → 原子应用/回滚”的 Control Plane；
+- 支持版本化 Prompt、长期事实记忆、Skill 和隔离 Docker Sandbox；
+- 提供 L0–L6 分层 E2E、跨进程恢复、Docker、健康检查与性能门禁。
 
-# 先启动 NapCat（Docker 或本地均可），确认扫码登录成功后启动 Bot
-python -m src.main
+## 核心架构
+
+```text
+NapCatQQ WebSocket
+  → EventBus.parse（保留 raw_event / raw_message / message_array / CQ）
+  → Event Journal + MessageStore（先持久化，失败可恢复）
+  → FilterManager
+  → MessageBus.EXTERNAL
+  → Plugin.match / Plugin.handle
+      └→ LLM AgentLoop
+          → Durable Task / Run / Step
+          → ToolExecutor
+              ├→ QQ API / Artifact / History
+              ├→ Workspace / Local Search / Web
+              ├→ Scheduler / Memory
+              └→ Control Plane Proposal
+  → MessageBus.ACTION
+  → block / bypass / spam / rate-limit
+  → NapCat API
+  → 出站消息持久化
 ```
 
-本地 NapCat 的 WebSocket 端口默认 `127.0.0.1:3001`，与 `config/bot.toml` 中的 `ws_url` 一致。
+关键原则：
 
-## 服务器部署（Docker Compose）
+- 原始 CQ 是事实数据，不在接入层做有损预处理；
+- 消息和资源以数据库为首要事实源，NapCat 查询是回补与兜底；
+- 网页内容和下载结果始终标记为不可信外部输入；
+- Agent 可以提出高风险变更，但没有自我审批工具；
+- 结果未知的写操作在重启后进入人工审批，不盲目重放。
+
+## 快速开始
 
 ### 环境要求
 
-- Ubuntu 20.04+，已安装 Docker 和 Docker Compose
-- QQ 号一个（已过风控，能正常登录）
+- Python 3.12+
+- NapCatQQ
+- 可选：Docker Desktop / Docker Engine，用于部署、Sandbox 和容器 E2E
 
-### 1. 克隆项目
+### 本地开发
 
 ```bash
-git clone https://github.com/y72dot/Frieren.git
-cd Frieren
+python -m venv venv
+
+# Linux/macOS
+source venv/bin/activate
+
+# Windows PowerShell
+# .\venv\Scripts\Activate.ps1
+
+pip install -e ".[dev]"
+cp .env.example .env
 ```
 
-### 2. 配置唯一 Bot
+修改 `config/bot.toml`：
 
-项目按一个完整 Bot 个体部署。仓库内置 `frieren` 配置（QQ=3632757457）作为参考；更换账号时直接替换该部署配置，不并行复制多 Bot 工作区：
-
-修改 `instances/frieren/bot.toml` 中的关键字段：
 ```toml
 [bot]
-qq = <你的QQ号>
-nickname = "<机器人昵称>"
-admin_users = [<你的QQ号>]
+qq = 123456789
+nickname = ["机器人昵称"]
+admin_users = [987654321]
 
 [napcat]
-ws_url = "ws://napcat-frieren:3001"  # 与 docker-compose 服务名一致
+mode = "active"
+ws_url = "ws://127.0.0.1:3001"
+token = ""
 
-[plugin]
-plugin_dirs = ["/app/plugins"]         # Docker 内部路径
+[filter.group]
+mode = "whitelist"
+list = [测试群号]
+
+[filter.private]
+mode = "whitelist"
+list = [管理员QQ]
 ```
 
-将 NapCat 配置和 `docker-compose.yml` 中的示例 QQ 号 `3632757457` 替换为实际账号。
+在 `.env` 中填写模型密钥：
 
-### 3. 填写环境变量
+```env
+LLM_API_KEY=sk-your-key
+# 也兼容 DEEPSEEK_API_KEY 和 OPENAI_API_KEY
+```
+
+先启动并登录 NapCat，然后启动 Bot：
 
 ```bash
-# 如果该文件不存在，先从 .env.example 复制
+python -m src.main
+```
+
+`scripts/run.sh` 提供 Linux 下的重启、PID 管理和实时日志入口。
+
+## Docker Compose 部署
+
+仓库只部署一个 Bot 和一个 NapCat，不为用户或群聊创建独立实例。
+
+### 1. 配置账号
+
+修改以下位置中的示例 QQ 号和权限配置：
+
+- `instances/frieren/bot.toml`；
+- `docker-compose.yml` 中 NapCat 的 `ACCOUNT`；
+- `instances/napcat-frieren/config/` 中 OneBot/NapCat 配置。
+
+准备部署密钥：
+
+```bash
+cp .env.example instances/frieren/.env
 vim instances/frieren/.env
 ```
 
-```env
-DEEPSEEK_API_KEY=sk-your-real-key
-OPENAI_API_KEY=sk-your-real-key
-NAPCAT_WEBUI_TOKEN=     # 留空，NapCat 会自动生成
-```
-
-### 4. 构建镜像
+### 2. 构建并登录 NapCat
 
 ```bash
-docker compose build
+docker compose build qqbot-frieren
+docker compose up -d napcat-frieren sandbox
+docker compose logs -f napcat-frieren
 ```
 
-### 5. 启动 NapCat 并扫码登录
+NapCat WebUI 仅绑定 `127.0.0.1:6099`。远程服务器可使用 SSH 隧道：
 
 ```bash
-# 只启动 NapCat 容器
-docker compose up -d napcat-frieren
-
-# 查看 WebUI token
-docker compose logs napcat-frieren | grep -i token
+ssh -L 6099:127.0.0.1:6099 user@server
 ```
 
-然后通过 SSH 隧道访问 WebUI 扫码：
+浏览器打开 `http://localhost:6099`，完成扫码登录。
 
-```bash
-# 在本地机器执行（不是服务器）：
-ssh -L 6099:127.0.0.1:6099 user@your-server
-
-# 浏览器打开 http://localhost:6099
-# 输入上面获取的 token 登录，使用手机 QQ 扫码
-```
-
-扫码成功后 NapCat 容器内 `QQ/` 目录会保存登录会话，后续重启无需重新扫码。
-
-### 6. 启动 Bot
+### 3. 启动 Bot
 
 ```bash
 docker compose up -d qqbot-frieren
 docker compose logs -f qqbot-frieren
+docker compose ps
 ```
 
-看到 `Connected to NapCat` 即为成功。
+生产服务显式构建 Dockerfile 的 `runtime` target，入口固定为：
 
-### 一键部署脚本
+```text
+python -m src.main
+```
 
-也可以使用提供的部署脚本：
+容器健康检查会验证配置、Bot 心跳和 `messages.db` 的 SQLite `quick_check`，不再使用无条件成功的伪健康检查。
+
+一键初始部署：
 
 ```bash
 bash scripts/deploy.sh
 ```
 
-脚本会自动构建镜像、补全 .env 模板、启动所有 NapCat 容器。后续只需扫码登录后 `docker compose up -d` 启动 Bot。
+该脚本构建镜像、准备唯一 Bot 的 `.env` 并启动 NapCat；扫码后再启动 `sandbox` 和 `qqbot-frieren`。
 
-## 备份与恢复
+## 配置、Prompt 与数据
 
-### 备份
+### 统一配置
 
-```bash
-bash scripts/backup.sh
+- 本地配置：`config/bot.toml`；
+- Docker 配置：`instances/frieren/bot.toml`；
+- 密钥：`.env` 或 `instances/frieren/.env`，不会进入配置快照或 Docker 构建上下文；
+- 非敏感运行时覆盖：持久化到 `data/config_state.db`；
+- 每个 Agent Run 记录配置快照与 Prompt 版本。
+
+主要配置域：
+
+| 配置段 | 用途 |
+| --- | --- |
+| `bot` / `napcat` | 唯一 Bot 身份与 NapCat 连接 |
+| `filter` / `plugin` | 全局及插件级会话过滤 |
+| `llm` / `llm.prompts` | 模型、会话和 Prompt Profile |
+| `artifacts` / `history` | 资源归档和离线历史回补 |
+| `tools` / `runtime` | 工具执行限制和持久化运行时 |
+| `scheduler` | 时区、轮询和 misfire 限制 |
+| `workspace` / `web` | Bot 工作空间和安全网页访问 |
+
+### 版本化 Prompt
+
+Prompt 统一位于 `config/prompts/`：
+
+```text
+manifest.toml
+identity.md
+behavior.md
+response_style.md
+qq_context.md
+tool_policy.md
+memory_policy.md
+task_planner.md
 ```
 
-备份内容包括：
-- 各 NapCat 实例的 `QQ/` 目录（登录会话，避免反复扫码）
-- 各 Bot 实例的配置目录
+Control Plane 应用 Prompt 时会原子替换文件与 Manifest、重新加载并校验版本；任一步失败都会恢复旧版本。
 
-备份存放于 `backups/<时间戳>/`，自动保留最近 7 份。
+### 持久化数据
 
-### 恢复
+默认运行数据位于 `data/`：
 
-```bash
-# 恢复 QQ 会话
-cp -r backups/20250101_120000/napcat-frieren-session/* instances/napcat-frieren/QQ/
+- `messages.db`：Event Journal、消息、Segments、Artifact、Invocation、Task/Run/Step、Schedule 和 Control Plane；
+- `llm_state.db`：会话与长期记忆；
+- `config_state.db`：配置快照和非敏感运行时覆盖；
+- `artifacts/`：SHA-256 内容寻址资源；
+- `workspace/`：唯一 Bot 自有工作空间；
+- `health.json`：进程心跳。
 
-# 恢复 Bot 配置
-cp -r backups/20250101_120000/frieren-config/* instances/frieren/
-```
+## Agent 能力与安全边界
 
-## 常用命令
+当前 ToolCatalog 包含 QQ 查询/管理、Artifact、搜索、工作空间、Web、调度和 Control Plane 等工具。
 
-```bash
-# 查看所有容器状态
-docker compose ps
+权限规则：
 
-# 查看日志
-docker compose logs -f qqbot-frieren        # Bot
-docker compose logs -f napcat-frieren       # NapCat
+- 普通用户只能搜索当前会话消息；
+- 跨会话搜索、文件、Web、Schedule 和 Control Plane 要求管理员；
+- 路径必须位于 Bot 工作空间内，拒绝 `..`、绝对路径和符号链接逃逸；
+- Web 仅允许 HTTP/HTTPS，并拦截 localhost、私网、链路本地、云元数据、危险重定向和 DNS rebinding；
+- 下载和网页响应进入 Artifact Store，不自动执行；
+- 插件候选先做 Manifest、AST、禁止导入和 SHA-256 复验；
+- Agent 只拥有提案工具，审批与应用必须由独立外部入口完成；
+- `.env`、管理员列表和密钥路径禁止通过 Control Plane 读取或修改。
 
-# 重启 Bot（加载新插件/配置）
-docker compose restart qqbot-frieren
+## 定时与可恢复任务
 
-# 更新部署（拉取最新代码后）
-git pull
-docker compose build
-docker compose up -d
-```
+Scheduler 支持：
 
-## 项目结构
+- 单次 `once`；
+- 固定间隔 `interval`；
+- 五字段 `cron`；
+- 领域事件 `event`。
 
-```
-qqbot/
-├── src/
-│   ├── main.py               # 入口
-│   └── core/
-│       ├── bot.py             # Bot 主控，组装各组件
-│       ├── config.py          # 配置加载（bot.toml + .env）
-│       ├── event_bus.py       # 事件总线：解析 napcat 事件 → 内部 Event
-│       ├── message_bus.py     # 消息总线：按优先级分发，支持抑制
-│       ├── message_store.py   # SQLite 消息持久化
-│       ├── filter_manager.py  # 全局 + 插件级过滤
-│       └── api_client.py      # API 调用封装
-├── plugins/                   # 插件目录（文件以 _ 开头则跳过）
-│   ├── history.py             # 消息历史记录（JSONL 日志）
-│   ├── ping.py                # /ping → Pong!
-│   ├── echo.py                # /echo <msg> → 复读
-│   ├── poke.py                # 戳一戳反击
-│   ├── repeater.py            # 复读机（两人连续相同消息）
-│   └── essence.py             # 群精华消息管理（设精 / 寸止）
-├── config/
-│   └── bot.toml               # 默认本地开发配置
-├── instances/                 # 唯一 Bot 的部署状态
-│   ├── frieren/               # Bot 配置 + .env
-│   └── napcat-frieren/        # NapCatQQ 配置 + QQ 会话
-├── scripts/
-│   ├── deploy.sh              # Docker Compose 一键部署
-│   ├── backup.sh              # 备份 QQ 会话和配置
-│   ├── run.sh                 # PID-based 本地后台启动
-│   └── start.sh               # 简单本地启动
-├── tests/                     # 测试
-├── Dockerfile
-└── docker-compose.yml
-```
-
-## 架构
-
-```
-NapCatQQ WebSocket → EventBus.parse（原始事件 → 内部 Event）
-  → MessageStore.record（持久化）
-    → MessageBus.dispatch（按 priority 升序遍历插件）
-      → FilterManager 拦截（全局 → 插件级）
-        → Plugin.match → Plugin.handle
-          → MessageBus.flush（排空 ACTION 队列）
-            → ApiClient → HTTP/WS 调用
-```
+每个 Schedule 保存时区、misfire 策略和并发上限。`skip`、`run_once` 和 `catch_up` 行为显式配置；会发送消息的任务默认禁止批量 catch-up，避免重启后轰炸 QQ。
 
 ## 插件开发
 
-插件只需实现 `match(event) -> bool` 和 `handle(event, bot) -> bool`：
+插件使用内部 `Event`，禁止直接依赖 NapCat 类型：
 
 ```python
 from src.plugin.base import Event
+
 
 class MyPlugin:
     name = "my_plugin"
     priority = 10
 
     def match(self, event: Event) -> bool:
-        return event.is_group and "你好" in event.message
+        return event.is_group and event.message.startswith("/hello")
 
     async def handle(self, event: Event, bot) -> bool:
-        await bot.api.send_group_msg(event.group_id, "你好呀！")
-        return True  # 消费事件，后续插件不再执行
+        await bot.api.send_group_msg(event.group_id, "你好")
+        return True
 ```
 
-也可用装饰器：
+约定：
 
-```python
-from src.plugin.decorators import command, on_regex, on_keyword, on_notice
+- `match() == True` 才执行 `handle()`；
+- `handle() == True` 表示消费 EXTERNAL/ACTION 消息，后续插件不再执行；
+- `handle() == False` 继续尝试下一个插件；
+- `@subscribe` 直接处理器签名为 `(payload, bot) -> bool`；
+- 插件文件放在 `plugins/`，以下划线开头的文件不会自动发现。
 
-@command("/hello")
-async def hello(event, bot):
-    await bot.api.send_group_msg(event.group_id, "Hi!")
-    return True
+## 项目结构
 
-@on_regex(r"^复读\s+(.+)")
-async def repeat(event, bot, match):
-    await bot.api.send_group_msg(event.group_id, match.group(1))
-    return True
+```text
+src/
+├── adapters/qq/          # 无损 QQ Adapter、历史和文件 Gateway
+├── core/
+│   ├── artifacts/        # Artifact Store 与物化服务
+│   ├── config_center/    # 统一配置、快照和运行时覆盖
+│   ├── control_plane/    # 设置、Prompt、插件提案和回滚
+│   ├── history/          # 数据库优先查询和 NapCat 回补
+│   ├── llm/              # AgentLoop、工具、会话、记忆、Skill、Sandbox
+│   ├── prompts/          # PromptRegistry
+│   ├── runtime/          # Task/Run/Step、恢复和 Scheduler
+│   ├── search/           # 统一本地搜索
+│   ├── web/              # SSRF 防护的 Search/Fetch/Download
+│   ├── workspace/        # Bot 自有安全工作空间
+│   ├── bot.py            # 生命周期和组件装配
+│   ├── event_bus.py      # 原始事件解析与 Journal 恢复
+│   ├── message_bus.py    # EXTERNAL/ACTION/INTERNAL/LIFECYCLE 总线
+│   └── message_store.py  # SQLite 事实存储
+plugins/                  # QQ 插件与 Agent 工具注册
+config/prompts/           # 版本化 Prompt
+instances/                # 唯一 Bot 和 NapCat 部署状态
+scripts/                  # 部署、备份、E2E、性能基线
+tests/                    # 单元、集成、数据驱动和 Live E2E
 ```
-
-- `@command(cmds)` — 精确命令匹配
-- `@on_regex(pattern)` — 正则匹配，`match` 对象作为 handler 第三参数
-- `@on_keyword(keywords)` — 关键词包含匹配
-- `@on_notice(notice_type)` — 通知事件匹配
-
-## 配置参考
-
-```toml
-[bot]
-qq = 123456789
-nickname = ["机器人"]
-admin_users = [987654321]
-
-[napcat]
-mode = "active"              # active: Bot 连 NapCat | reverse: NapCat 连 Bot
-ws_url = "ws://127.0.0.1:3001"
-token = ""                   # WebSocket 鉴权 token，为空则不验证
-reconnect_interval = 5       # 断线重连间隔（秒），指数退避最大 300s
-
-[plugin]
-auto_discover = true
-plugin_dirs = ["plugins"]
-disabled_plugins = []        # 禁用的插件 name
-
-[filter]
-enable = true
-
-[filter.group]
-mode = "whitelist"           # whitelist | blacklist | off
-list = [123456789]
-
-[filter.private]
-mode = "off"
-list = []
-
-# 每个插件可独立配置过滤规则
-[filter.plugins.ping]
-enable = true
-[filter.plugins.ping.group]
-mode = "whitelist"
-list = [123456789]
-
-[logging]
-level = "INFO"               # DEBUG | INFO | WARNING | ERROR
-file = "logs/bot.log"
-rotation = "10 MB"
-retention = "14 days"
-```
-
-## 环境变量
-
-| 变量 | 说明 |
-|------|------|
-| `BOT_CONFIG_DIR` | 配置目录路径（Docker 中设为 `/config`） |
-| `NAPCAT_MODE` | 覆盖 `napcat.mode` |
-| `NAPCAT_WS_URL` | 覆盖 `napcat.ws_url` |
-| `NAPCAT_TOKEN` | 覆盖 `napcat.token` |
-| `NAPCAT_REVERSE_PORT` | 覆盖反向模式端口 |
-| `DEEPSEEK_API_KEY` | DeepSeek API Key（从 `.env` 加载） |
 
 ## 测试与发布门禁
 
+### 主机测试
+
 ```bash
-# 完整单元与集成测试
+# 全量单元与集成测试
 pytest -q
 
-# L0-L5 分层 E2E，并生成 data/test-reports/e2e-report.json
+# L0-L5 分层 E2E，报告写入 data/test-reports/e2e-report.json
 python scripts/run_e2e.py
 
-# Docker 中运行相同 E2E 矩阵
-docker compose --profile test run --rm e2e
-
-# 性能基线
+# 性能门禁
 python scripts/benchmark.py --enforce
 ```
 
-真实 QQ 验收属于 L6，需要明确授权并提供测试群：
+当前验收结果：
+
+- 主机全量：`682 passed, 2 skipped`；
+- 主机 L0-L5：`193 passed, 1 conditional skip`；
+- Docker/Linux L0-L5：`194 passed`；
+- 写入吞吐：约 `2441 messages/s`；
+- 消息搜索 P95：约 `0.669 ms`。
+
+主机条件跳过包括 Windows 无符号链接权限；Linux 容器中该安全用例已经实际通过。另一个 skip 是未授权的真实 QQ L6。
+
+### Docker E2E
+
+测试镜像与生产镜像使用不同 target：
 
 ```bash
-QQBOT_LIVE=1 NAPCAT_WS_URL=ws://127.0.0.1:3001 \
-QQBOT_LIVE_GROUP_ID=123456 python scripts/run_e2e.py --levels L6 --require-live
+docker compose --profile test build e2e
+docker compose --profile test run --rm e2e
 ```
 
-L6 会发送带时间戳的验收消息并从群历史中确认，设置 `QQBOT_LIVE_ARTIFACT` 时还会上传指定测试文件。不要对生产群直接执行该门禁。
+Docker 契约测试会确认生产服务使用 `runtime`、E2E 服务使用 `test`，并验证敏感配置没有进入测试镜像。
+
+### Live NapCat / QQ（L6）
+
+L6 会产生真实 QQ 副作用，默认不执行。只在专用测试群明确授权：
+
+```bash
+QQBOT_LIVE=1 \
+NAPCAT_WS_URL=ws://127.0.0.1:3001 \
+QQBOT_LIVE_GROUP_ID=123456 \
+python scripts/run_e2e.py --levels L6 --require-live
+```
+
+L6 会查询登录信息、发送唯一时间戳消息并轮询群历史确认。设置
+`QQBOT_LIVE_ARTIFACT` 时，测试会读取本机文件（上限 10 MiB）、以
+`base64://` 传给 NapCat，并轮询群根目录确认文件真正出现；因此该路径不必
+在 NapCat 容器内可见。
+
+生产放行仍要求：
+
+1. 在专用测试群通过 L6；
+2. 在目标服务器完成 Bot 容器重启、NapCat 断线重连和持久卷恢复演练。
+
+## 备份与恢复
+
+```bash
+bash scripts/backup.sh
+```
+
+脚本备份唯一 NapCat 登录会话和 Bot 配置到 `backups/<时间戳>/`，保留最近 7 份。
+
+恢复示例：
+
+```bash
+cp -r backups/20260722_120000/napcat-frieren-session/* instances/napcat-frieren/QQ/
+cp -r backups/20260722_120000/frieren-config/* instances/frieren/
+```
+
+恢复前应停止相关容器并保留当前目录副本。恢复后执行健康检查、L0-L5 和目标服务器故障演练。
+
+## 详细设计文档
+
+- `REFACTOR_PLAN.md`：完整架构和分阶段重构方案；
+- `PHASE1_IMPLEMENTATION.md`：ConfigCenter 与 PromptRegistry；
+- `PHASE2_IMPLEMENTATION.md`：无损 QQ Adapter 与消息数据库；
+- `PHASE3_IMPLEMENTATION.md`：Artifact Store 与 QQ 文件；
+- `PHASE4_IMPLEMENTATION.md`：离线历史回补；
+- `PHASE5_IMPLEMENTATION.md`：Tool Platform；
+- `PHASE6_IMPLEMENTATION.md`：Durable Runtime 与 Scheduler；
+- `PHASE7_IMPLEMENTATION.md`：本地/Web 搜索与 Control Plane；
+- `PHASE8_IMPLEMENTATION.md`：全量 E2E 与生产切换门禁。

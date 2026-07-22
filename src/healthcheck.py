@@ -15,6 +15,7 @@ def main() -> None:
     parser.add_argument("--state", default="data/health.json")
     parser.add_argument("--database", default="data/messages.db")
     parser.add_argument("--max-age", type=float, default=90.0)
+    parser.add_argument("--max-consecutive-event-errors", type=int, default=3)
     parser.add_argument("--require-napcat", action="store_true")
     args = parser.parse_args()
 
@@ -25,6 +26,7 @@ def main() -> None:
             database=args.database,
             max_age=args.max_age,
             require_napcat=args.require_napcat,
+            max_consecutive_event_errors=args.max_consecutive_event_errors,
         )
     except Exception as exc:
         report = {"healthy": False, "errors": [f"configuration invalid: {exc}"]}

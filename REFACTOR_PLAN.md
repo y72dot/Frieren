@@ -1849,7 +1849,7 @@ then:
 
 验收：满足第 27 节全部发布标准。
 
-执行记录（2026-07-22）：阶段八自动化实现已完成。已建立 L0-L6 分层运行器、JSON E2E 场景、真实跨进程恢复测试、进程心跳与 SQLite 健康检查、Docker test target、Live NapCat 显式授权门禁及性能基线，并将部署文档和脚本收口为单一 Bot。L0-L5 共 190 个分层用例通过；全量测试为 679 passed、2 skipped；性能结果为 2441.55 messages/s、搜索 P95 0.669 ms。生产切换尚未放行：Docker Hub 网络超时导致测试镜像未完成构建，真实 QQ L6 未获授权。详细记录见 `PHASE8_IMPLEMENTATION.md`。
+执行记录（2026-07-22）：阶段八自动化实现已完成。已建立 L0-L6 分层运行器、JSON E2E 场景、真实跨进程恢复测试、进程心跳与 SQLite 健康检查、Docker test target、Live NapCat 显式授权门禁及性能基线，并将部署文档和脚本收口为单一 Bot。主机 L0-L5 共 193 passed、1 conditional skip；Docker/Linux L0-L5 为 194 passed；全量测试为 682 passed、2 skipped；性能结果为 2441.55 messages/s、搜索 P95 0.669 ms。生产切换尚未放行：真实 QQ L6 未获授权，目标服务器重启和断线演练待执行。详细记录见 `PHASE8_IMPLEMENTATION.md`。
 
 ## 26. 开发拆分和依赖关系
 

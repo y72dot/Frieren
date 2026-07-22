@@ -54,6 +54,27 @@ def test_sdk_style_event_serialization_and_segments() -> None:
     assert extract_message_array(raw) == raw.message
 
 
+def test_real_napcat_event_serialization_ignores_uncopyable_client() -> None:
+    from napcat import NapCatEvent
+
+    class Client:
+        rpc_mode = False
+        uncopyable = (item for item in range(1))
+
+    raw = {
+        "time": 1_700_000_000,
+        "self_id": 123456,
+        "post_type": "meta_event",
+        "meta_event_type": "heartbeat",
+        "status": {"online": True},
+        "interval": 30_000,
+        "future_field": {"kept": True},
+    }
+    event = NapCatEvent.from_dict(raw, client=Client())
+
+    assert json.loads(serialize_raw_event(event)) == raw
+
+
 def test_event_bus_keeps_raw_cq_and_message_array() -> None:
     raw = {
         "post_type": "message",
