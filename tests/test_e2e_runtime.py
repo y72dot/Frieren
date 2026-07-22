@@ -119,7 +119,7 @@ async def test_agent_creates_workspace_artifact_through_durable_tool_chain(
     ]
     e2e_llm_bot.llm_provider = provider
 
-    await dispatch_raw_event(e2e_llm_bot, _message("创建结果文件", message_id=2))
+    await dispatch_raw_event(e2e_llm_bot, _message("生成文件：结果", message_id=2))
 
     assert (tmp_path / "workspace" / "result.txt").read_text(encoding="utf-8") == (
         "created by durable agent"

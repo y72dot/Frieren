@@ -73,7 +73,7 @@ class TestMultiTurnScenarios:
             ],
         )
 
-        raw = _raw_at_msg(text="Check for spam")
+        raw = _raw_at_msg(text="Check for spam and use mute_user if needed")
         await dispatch_raw_event(e2e_llm_bot, raw)
 
         assert_api_called(

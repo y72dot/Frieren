@@ -57,6 +57,40 @@ def _platform(tool: ToolDef, **executor_options):
 
 
 @pytest.mark.asyncio
+async def test_current_tool_view_is_a_hard_execution_allowlist():
+    calls = 0
+
+    async def run(args, group_id, user_id, bot):
+        nonlocal calls
+        calls += 1
+        return {"ok": True}
+
+    executor, store = _platform(_tool(run, idempotency="keyed"))
+    args = {"mode": "safe", "count": 1}
+
+    allowed = await executor.execute(
+        "demo",
+        args,
+        _context(run_id="run-allowed"),
+        object(),
+        allowed_tool_names={"demo"},
+    )
+    denied = await executor.execute(
+        "demo",
+        args,
+        _context(run_id="run-denied"),
+        object(),
+        allowed_tool_names=set(),
+    )
+
+    assert allowed == {"ok": True}
+    assert denied == {"error": "tool demo is not available in the current ToolView"}
+    assert calls == 1
+    assert store.list_for_run("run-denied")[0].status == "denied"
+    assert executor.metrics.snapshot().denied == 1
+
+
+@pytest.mark.asyncio
 async def test_success_is_persisted_with_redacted_arguments():
     async def run(args, group_id, user_id, bot):
         return {"ok": True, "count": args["count"]}

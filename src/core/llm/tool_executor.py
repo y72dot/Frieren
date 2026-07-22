@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import time as _time
+from collections.abc import Set
 from typing import Any
 
 from loguru import logger
@@ -43,6 +44,8 @@ class ToolExecutor:
         args: dict[str, Any],
         ctx: ToolCallContext,
         bot: Any,
+        *,
+        allowed_tool_names: Set[str] | None = None,
     ) -> dict[str, Any]:
         self.metrics.record_execution()
         tool = self.catalog.get(tool_name)
@@ -53,6 +56,14 @@ class ToolExecutor:
             self._finish(invocation, "invalid", error=error)
             return {"error": error}
 
+        if allowed_tool_names is not None and tool_name not in allowed_tool_names:
+            self.metrics.record_denied()
+            error = f"tool {tool_name} is not available in the current ToolView"
+            logger.warning(f"Tool '{tool_name}' denied by current ToolView")
+            invocation = self._begin_registered(tool, args, ctx, idempotency_key=None)
+            self._finish(invocation, "denied", error=error)
+            return {"error": error}
+
         idempotency_key = _idempotency_key(tool, args, ctx)
         if self.invocation_store is not None and idempotency_key:
             previous = self.invocation_store.find_succeeded(tool_name, idempotency_key)
@@ -60,22 +71,7 @@ class ToolExecutor:
                 result = previous.result()
                 return result if isinstance(result, dict) else {"result": result}
 
-        invocation = None
-        if self.invocation_store is not None:
-            invocation = self.invocation_store.begin(
-                tool_name=tool.name,
-                tool_version=tool.version,
-                arguments=args,
-                run_id=ctx.run_id,
-                task_id=ctx.task_id,
-                step_id=ctx.step_id,
-                invocation_id=ctx.invocation_id,
-                idempotency_key=idempotency_key,
-                trace_id=ctx.trace_id,
-                user_id=ctx.user_id,
-                group_id=ctx.group_id,
-                config_snapshot_id=ctx.config_snapshot_id,
-            )
+        invocation = self._begin_registered(tool, args, ctx, idempotency_key)
 
         error = _validate_args(tool, args)
         if error:
@@ -136,6 +132,30 @@ class ToolExecutor:
             self._write_audit(tool_name, args, ctx, normalized)
         self._finish(invocation, "succeeded", result=normalized)
         return normalized
+
+    def _begin_registered(
+        self,
+        tool: ToolDef,
+        args: dict[str, Any],
+        ctx: ToolCallContext,
+        idempotency_key: str | None,
+    ) -> Any:
+        if self.invocation_store is None:
+            return None
+        return self.invocation_store.begin(
+            tool_name=tool.name,
+            tool_version=tool.version,
+            arguments=args,
+            run_id=ctx.run_id,
+            task_id=ctx.task_id,
+            step_id=ctx.step_id,
+            invocation_id=ctx.invocation_id,
+            idempotency_key=idempotency_key,
+            trace_id=ctx.trace_id,
+            user_id=ctx.user_id,
+            group_id=ctx.group_id,
+            config_snapshot_id=ctx.config_snapshot_id,
+        )
 
     def _begin_unknown(
         self, tool_name: str, args: dict[str, Any], ctx: ToolCallContext

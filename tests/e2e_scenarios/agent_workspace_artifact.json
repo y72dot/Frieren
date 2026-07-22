@@ -28,10 +28,10 @@
         "user_id": 111,
         "self_id": 123456,
         "time": 1784600001,
-        "raw_message": "[CQ:at,qq=123456] 创建端到端报告",
+        "raw_message": "[CQ:at,qq=123456] 生成文件：端到端报告",
         "message": [
           {"type": "at", "data": {"qq": "123456"}},
-          {"type": "text", "data": {"text": " 创建端到端报告"}}
+          {"type": "text", "data": {"text": " 生成文件：端到端报告"}}
         ],
         "sender": {"nickname": "管理员"}
       }

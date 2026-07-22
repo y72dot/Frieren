@@ -27,10 +27,10 @@
         "user_id": 111,
         "self_id": 123456,
         "time": 1784600002,
-        "raw_message": "[CQ:at,qq=123456] 把网页超时改成12秒",
+        "raw_message": "[CQ:at,qq=123456] 修改设置：把网页超时改成12秒",
         "message": [
           {"type": "at", "data": {"qq": "123456"}},
-          {"type": "text", "data": {"text": " 把网页超时改成12秒"}}
+          {"type": "text", "data": {"text": " 修改设置：把网页超时改成12秒"}}
         ],
         "sender": {"nickname": "管理员"}
       }

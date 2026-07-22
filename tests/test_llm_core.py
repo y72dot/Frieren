@@ -81,7 +81,6 @@ class TestLlmAgentService:
         from src.core.llm.agent_service import handle_trigger as llm_core_handler
 
         _lazy_init(bot_with_llm)
-
         from src.core.llm import ToolCall
 
         provider = bot_with_llm.llm_provider
@@ -114,7 +113,7 @@ class TestLlmAgentService:
                 "user_id": 111,
                 "group_id": 123,
                 "is_group": True,
-                "text": "设精最后一条消息",
+                "text": "使用 send_message 发送最后一条消息",
                 "nickname": "测试用户",
             },
             bot_with_llm,
@@ -132,13 +131,66 @@ class TestLlmAgentService:
         assert any("好的，我这就设精" in c.get("message", "") for c in send_calls)
 
     @pytest.mark.asyncio
+    async def test_hidden_tool_call_is_rejected_by_current_view(self, bot_with_llm):
+        from plugins.llm_sender import llm_sender_handler
+        from src.core.llm import ToolCall
+        from src.core.llm.agent_service import _lazy_init
+        from src.core.llm.agent_service import handle_trigger as llm_core_handler
+        from src.core.message_bus import MessageType
+
+        _lazy_init(bot_with_llm)
+        provider = bot_with_llm.llm_provider
+        provider.responses = [
+            LlmResponse(
+                tool_calls=[
+                    ToolCall(
+                        id="hidden_call",
+                        name="send_message",
+                        arguments={"text": "must-not-send"},
+                    )
+                ]
+            ),
+            LlmResponse(text="blocked"),
+        ]
+        bot_with_llm.message_bus.subscribe(
+            MessageType.INTERNAL, _make_adapter(llm_sender_handler, "llm_sender", 40), 40
+        )
+
+        await llm_core_handler(
+            {
+                "llm_type": "trigger",
+                "session_key": "group:tool-view-denial",
+                "user_id": 111,
+                "group_id": 123,
+                "is_group": True,
+                "text": "hello",
+                "nickname": "tester",
+            },
+            bot_with_llm,
+        )
+
+        sent_messages = [
+            call.get("message", "")
+            for call in bot_with_llm.api.calls
+            if call.get("method") == "send_group_msg"
+        ]
+        assert "must-not-send" not in sent_messages
+        tool_messages = [
+            message
+            for message in provider.calls[1]["messages"]
+            if message.get("role") == "tool"
+        ]
+        assert len(tool_messages) == 1
+        assert "current ToolView" in tool_messages[0]["content"]
+        assert bot_with_llm.tool_executor.metrics.snapshot().denied == 1
+
+    @pytest.mark.asyncio
     async def test_tool_call_to_sender_fallback(self, bot_with_llm):
         """When LLM returns tool_calls repeatedly, max_turns triggers final reply."""
         from src.core.llm.agent_service import _lazy_init
         from src.core.llm.agent_service import handle_trigger as llm_core_handler
 
         _lazy_init(bot_with_llm)
-
         from src.core.llm import ToolCall
 
         provider = bot_with_llm.llm_provider
@@ -169,7 +221,7 @@ class TestLlmAgentService:
                 "user_id": 111,
                 "group_id": 123,
                 "is_group": True,
-                "text": "loop test",
+                "text": "send_message loop test",
                 "nickname": "测试用户",
             },
             bot_with_llm,

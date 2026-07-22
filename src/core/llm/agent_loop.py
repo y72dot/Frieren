@@ -160,7 +160,12 @@ class AgentLoop:
             assistant_tool_msg = _make_assistant_tool_msg(response.tool_calls)
             session.messages.append(assistant_tool_msg)
 
-            results = await self._execute_tools(response.tool_calls, ctx, bot)
+            results = await self._execute_tools(
+                response.tool_calls,
+                ctx,
+                bot,
+                allowed_tool_names=frozenset(tool_view.names),
+            )
 
             # Process tool results
             for result in results:
@@ -239,7 +244,12 @@ class AgentLoop:
         return AgentResult(final_text=reply, turns=turn, tripped=True, tool_call_count=tool_call_count)
 
     async def _execute_tools(
-        self, tool_calls: list[ToolCall], ctx: ToolCallContext, bot: Any
+        self,
+        tool_calls: list[ToolCall],
+        ctx: ToolCallContext,
+        bot: Any,
+        *,
+        allowed_tool_names: frozenset[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Execute calls directly through persisted Invocation records."""
         results: list[dict[str, Any]] = []
@@ -259,7 +269,13 @@ class AgentLoop:
                 step_id=step_id,
                 invocation_id=uuid.uuid4().hex,
             )
-            result = await self.executor.execute(call.name, call.arguments, call_ctx, bot)
+            result = await self.executor.execute(
+                call.name,
+                call.arguments,
+                call_ctx,
+                bot,
+                allowed_tool_names=allowed_tool_names,
+            )
             if runtime is not None and step_id != ctx.step_id:
                 if "error" in result:
                     runtime.store.update_step(
