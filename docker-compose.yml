@@ -1,10 +1,7 @@
-# QQ Bot multi-instance deployment with NapCatQQ
-#
-# Each QQ account = one napcat service + one qqbot service.
-# Add more instances by duplicating the service pair with new names.
+# Single QQ Bot deployment with NapCatQQ.
 #
 # Quick start:
-#   1. Create instances/<name>/bot.toml (see instances/frieren/ for example)
+#   1. Configure instances/frieren/bot.toml
 #   2. docker compose up -d napcat-frieren
 #   3. docker compose logs napcat-frieren    # get WebUI URL + token for QR login
 #   4. SSH tunnel: ssh -L 6099:127.0.0.1:6099 user@host, open http://localhost:6099
@@ -45,15 +42,26 @@ services:
       - PYTHONPATH=/app
     volumes:
       - ./instances/frieren:/config
+      - ./config/prompts:/config/prompts
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - bot-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      test: ["CMD", "python", "-m", "src.healthcheck", "--config-dir", "/config", "--state", "data/health.json", "--database", "data/messages.db", "--max-age", "90"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  e2e:
+    profiles: ["test"]
+    build:
+      context: .
+      target: test
+    working_dir: /app
+    environment:
+      - PYTHONPATH=/app
+    command: ["python", "scripts/run_e2e.py", "--levels", "L0,L1,L2,L3,L4,L5"]
 
   # ------------------------------------------------------------------
   # Sandbox — agent's Linux playground

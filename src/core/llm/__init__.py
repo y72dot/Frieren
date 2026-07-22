@@ -12,6 +12,7 @@ from src.core.llm.session_logger import LlmSessionLogger
 from src.core.llm.sandbox import RiskLevel
 from src.core.llm.tool_catalog import ToolCatalog, ToolDef
 from src.core.llm.tool_permissions import ToolCallContext, check_permission
+from src.core.llm.invocation_store import InvocationStore, ToolInvocation
 from src.core.llm.tool_executor import ToolExecutor
 
 # Phase 2: session management
@@ -47,6 +48,8 @@ __all__ = [
     "check_permission",
     # tool_executor
     "ToolExecutor",
+    "InvocationStore",
+    "ToolInvocation",
     # session_manager
     "Session",
     "SessionManager",

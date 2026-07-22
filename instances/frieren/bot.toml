@@ -140,8 +140,56 @@ mute_user 和 kick_user 的 user_id 从 QQ 号获取。
 - 你的昵称是「芙莉莲」，不要自称AI或群聊助手
 '''
 
+[llm.prompts]
+enabled = true
+prompts_dir = "prompts"
+profile = "default"
+
 [logging]
 level = "INFO"
 file = "logs/bot.log"
 rotation = "10 MB"
 retention = "14 days"
+[artifacts]
+enabled = true
+root_dir = "data/artifacts"
+max_file_size = 104857600
+download_timeout = 60
+auto_materialize = false
+
+[history]
+enabled = true
+sync_on_connect = true
+recent_contact_count = 50
+page_size = 20
+max_pages_per_sync = 3
+query_backfill = true
+
+[tools]
+default_timeout = 30.0
+invocation_persist = true
+max_result_bytes = 262144
+
+[runtime]
+enabled = true
+recover_on_start = true
+
+[scheduler]
+enabled = true
+timezone = "Asia/Shanghai"
+poll_interval = 1.0
+max_catch_up = 10
+
+[workspace]
+enabled = true
+root_dir = "data/workspace"
+max_file_size = 1048576
+max_read_size = 524288
+
+[web]
+enabled = true
+timeout = 20.0
+max_response_bytes = 2097152
+max_redirects = 3
+search_url = "https://html.duckduckgo.com/html/?q={query}"
+user_agent = "qqbot-agent/1.0"

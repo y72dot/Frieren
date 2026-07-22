@@ -178,3 +178,32 @@ def test_default_sections():
     assert bc.napcat.ws_url == "ws://127.0.0.1:3001"
     assert bc.plugin.auto_discover is True
     assert bc.logging.level == "INFO"
+    assert bc.llm.prompts.enabled is False
+
+
+def test_llm_prompt_registry_config():
+    content = """\
+[bot]
+qq = 123
+
+[napcat]
+
+[llm]
+system_prompt = "legacy fallback"
+
+[llm.prompts]
+enabled = true
+prompts_dir = "prompts"
+profile = "planner"
+"""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_pyproject(root)
+        _write_toml(content, root)
+
+        cfg = load_config(config_dir=str(root / "config"))
+
+    assert cfg.llm.system_prompt == "legacy fallback"
+    assert cfg.llm.prompts.enabled is True
+    assert cfg.llm.prompts.prompts_dir == "prompts"
+    assert cfg.llm.prompts.profile == "planner"

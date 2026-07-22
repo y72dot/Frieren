@@ -9,11 +9,9 @@ from __future__ import annotations
 import json
 import sqlite3
 import time as _time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-from loguru import logger
 
 
 @dataclass
@@ -184,6 +182,27 @@ class MemoryManager:
     def query_all_facts(self, subject: str) -> list[dict[str, Any]]:
         """Convenience: get all facts about a subject."""
         return self.query_facts(subject)
+
+    def search_facts(self, keyword: str, limit: int = 20) -> list[dict[str, Any]]:
+        if not self.config.semantic_enabled or self._conn is None or limit <= 0:
+            return []
+        pattern = f"%{keyword}%"
+        rows = self._conn.execute(
+            """SELECT subject, predicate, object, confidence, source FROM facts
+               WHERE subject LIKE ? OR predicate LIKE ? OR object LIKE ?
+               ORDER BY confidence DESC, id DESC LIMIT ?""",
+            (pattern, pattern, pattern, limit),
+        ).fetchall()
+        return [
+            {
+                "subject": row[0],
+                "predicate": row[1],
+                "object": row[2],
+                "confidence": row[3],
+                "source": row[4],
+            }
+            for row in rows
+        ]
 
     # ------------------------------------------------------------------
     # memory injection for LLM context

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from src.core.message_bus import BusMessage, MessageType  # noqa: F401  – re-export
@@ -33,6 +33,21 @@ class Event:
 
     is_group: bool = False
     """Convenience flag for group vs. private context."""
+
+    raw_message: str = ""
+    """Exact NapCat ``raw_message``. Unlike ``message``, never synthesized."""
+
+    message_array: list[dict[str, Any]] = field(default_factory=list)
+    """Original NapCat message segments when provided by the event."""
+
+    raw_event_json: str = ""
+    """Lossless JSON serialization used by the Event Journal."""
+
+    ingestion_source: str = "live"
+    """Where this event came from: live, backfill, fallback, or legacy."""
+
+    peer_id: int | None = None
+    """Private-conversation peer, especially for bot-originated messages."""
 
 
 @runtime_checkable

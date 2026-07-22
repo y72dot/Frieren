@@ -139,6 +139,19 @@ class LLMSkillsConfig:
 
 
 @dataclass
+class LLMPromptConfig:
+    """Versioned prompt registry configuration.
+
+    Disabled by default so programmatically injected ``LLMConfig`` instances
+    continue to honour ``system_prompt``. Deployments opt in explicitly.
+    """
+
+    enabled: bool = False
+    prompts_dir: str = "prompts"
+    profile: str = "default"
+
+
+@dataclass
 class SandboxConfig:
     container_name: str = "qqbot-sandbox"
     workspace: str = "/workspace"
@@ -148,6 +161,74 @@ class SandboxConfig:
     max_exec_timeout: int = 60
     stdout_limit: int = 102_400
     enabled: bool = True
+
+
+@dataclass
+class ArtifactConfig:
+    """Unified QQ resource discovery and content-addressed storage."""
+
+    enabled: bool = True
+    root_dir: str = "data/artifacts"
+    max_file_size: int = 104_857_600
+    download_timeout: int = 60
+    auto_materialize: bool = False
+
+
+@dataclass
+class HistoryConfig:
+    """Database-first history synchronization policy."""
+
+    enabled: bool = True
+    sync_on_connect: bool = True
+    recent_contact_count: int = 50
+    page_size: int = 20
+    max_pages_per_sync: int = 3
+    query_backfill: bool = True
+
+
+@dataclass
+class ToolPlatformConfig:
+    """Policy and persistence limits for agent tool execution."""
+
+    default_timeout: float = 30.0
+    invocation_persist: bool = True
+    max_result_bytes: int = 262_144
+
+
+@dataclass
+class RuntimeConfig:
+    """Durable task execution and restart recovery policy."""
+
+    enabled: bool = True
+    recover_on_start: bool = True
+
+
+@dataclass
+class SchedulerConfig:
+    """Persistent schedule polling and misfire policy limits."""
+
+    enabled: bool = True
+    timezone: str = "Asia/Shanghai"
+    poll_interval: float = 1.0
+    max_catch_up: int = 10
+
+
+@dataclass
+class WorkspaceConfig:
+    enabled: bool = True
+    root_dir: str = "data/workspace"
+    max_file_size: int = 1_048_576
+    max_read_size: int = 524_288
+
+
+@dataclass
+class WebConfig:
+    enabled: bool = True
+    timeout: float = 20.0
+    max_response_bytes: int = 2_097_152
+    max_redirects: int = 3
+    search_url: str = "https://html.duckduckgo.com/html/?q={query}"
+    user_agent: str = "qqbot-agent/1.0"
 
 
 @dataclass
@@ -165,11 +246,11 @@ class LLMConfig:
         "每条消息格式为「[消息ID] MM-DD HH:MM 昵称(QQ号): 内容」。消息ID是整数，引用消息时直接从中查找。「回复[id]」表示回复某条消息，「@QQ号」表示@某人，「[图片]」表示图片。mute_user/kick_user/set_admin/set_group_card/send_poke/get_member_info 的 user_id 从 QQ 号获取。\n"
         "\n"
         "## 规则\n"
-        "- 不确定工具有哪些或怎么用时，先调用 tool_help() 查看帮助；调用 tool_help(tool_name=\"chain_guide\") 可查看链式调用指南\n"
+        '- 不确定工具有哪些或怎么用时，先调用 tool_help() 查看帮助；调用 tool_help(tool_name="chain_guide") 可查看链式调用指南\n'
         "- 消息ID必须从聊天记录中提取，不要编造\n"
         "- 一个回复可连续调用多个工具，工具按声明顺序执行\n"
         "- 管理操作失败时，检查bot权限（群主/管理员），可先 get_member_info 确认bot自身角色\n"
-        "- 需要了解葬送的芙莉莲角色设定、世界观、人物关系时，调用 query_character(keyword=\"人名/关键词\") 查询\n"
+        '- 需要了解葬送的芙莉莲角色设定、世界观、人物关系时，调用 query_character(keyword="人名/关键词") 查询\n'
         "- 中文回复，简洁友好，不超过200字\n"
         "- 不要用 [CQ:xxx] 格式"
     )
@@ -178,6 +259,7 @@ class LLMConfig:
     session: LLMSessionConfig = field(default_factory=LLMSessionConfig)
     memory: LLMMemoryConfig = field(default_factory=LLMMemoryConfig)
     skills: LLMSkillsConfig = field(default_factory=LLMSkillsConfig)
+    prompts: LLMPromptConfig = field(default_factory=LLMPromptConfig)
     sandbox: SandboxConfig = field(default_factory=SandboxConfig)
 
 
@@ -190,6 +272,13 @@ class BotConfig:
     filter: FilterConfig = field(default_factory=FilterConfig)
     action_queue: ActionQueueConfig = field(default_factory=ActionQueueConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    artifacts: ArtifactConfig = field(default_factory=ArtifactConfig)
+    history: HistoryConfig = field(default_factory=HistoryConfig)
+    tools: ToolPlatformConfig = field(default_factory=ToolPlatformConfig)
+    runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
+    workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
+    web: WebConfig = field(default_factory=WebConfig)
     env: dict[str, str] = field(default_factory=dict)
 
 
@@ -331,6 +420,7 @@ def _parse_llm_section(data: dict[str, Any]) -> LLMConfig:
     session_raw = data.get("session", {})
     memory_raw = data.get("memory", {})
     skills_raw = data.get("skills", {})
+    prompts_raw = data.get("prompts", {})
     sandbox_raw = data.get("sandbox", {})
 
     return LLMConfig(
@@ -358,7 +448,7 @@ def _parse_llm_section(data: dict[str, Any]) -> LLMConfig:
                     "\n"
                     "## 工具链式调用指南\n"
                     "复杂操作按「分析→收集信息→决策→执行」流程：\n"
-                    "- 需要多步推理时，先调用 think(reasoning=\"...\") 梳理步骤\n"
+                    '- 需要多步推理时，先调用 think(reasoning="...") 梳理步骤\n'
                     "- 不了解群组状况时，先调用查询工具获取上下文（如 get_member_list + get_essence_list + get_shut_list）\n"
                     "- 不知道对方身份时，先调用 get_member_info 确认角色\n"
                     "- 需要证据时，先调用 query_history 搜索相关消息，再执行操作\n"
@@ -401,6 +491,11 @@ def _parse_llm_section(data: dict[str, Any]) -> LLMConfig:
             skills_dir=str(skills_raw.get("skills_dir", "config/skills")),
             auto_reload=bool(skills_raw.get("auto_reload", True)),
         ),
+        prompts=LLMPromptConfig(
+            enabled=bool(prompts_raw.get("enabled", False)),
+            prompts_dir=str(prompts_raw.get("prompts_dir", "prompts")),
+            profile=str(prompts_raw.get("profile", "default")),
+        ),
         sandbox=SandboxConfig(
             enabled=bool(sandbox_raw.get("enabled", True)),
             container_name=str(sandbox_raw.get("container_name", "qqbot-sandbox")),
@@ -421,6 +516,71 @@ def _parse_logging_section(data: dict[str, Any]) -> LoggingConfigSection:
         rotation=str(data.get("rotation", "10 MB")),
         retention=str(data.get("retention", "14 days")),
         json_format=bool(data.get("json_format", False)),
+    )
+
+
+def _parse_artifact_section(data: dict[str, Any]) -> ArtifactConfig:
+    return ArtifactConfig(
+        enabled=bool(data.get("enabled", True)),
+        root_dir=str(data.get("root_dir", "data/artifacts")),
+        max_file_size=int(data.get("max_file_size", 104_857_600)),
+        download_timeout=int(data.get("download_timeout", 60)),
+        auto_materialize=bool(data.get("auto_materialize", False)),
+    )
+
+
+def _parse_history_section(data: dict[str, Any]) -> HistoryConfig:
+    return HistoryConfig(
+        enabled=bool(data.get("enabled", True)),
+        sync_on_connect=bool(data.get("sync_on_connect", True)),
+        recent_contact_count=int(data.get("recent_contact_count", 50)),
+        page_size=int(data.get("page_size", 20)),
+        max_pages_per_sync=int(data.get("max_pages_per_sync", 3)),
+        query_backfill=bool(data.get("query_backfill", True)),
+    )
+
+
+def _parse_tool_platform_section(data: dict[str, Any]) -> ToolPlatformConfig:
+    return ToolPlatformConfig(
+        default_timeout=float(data.get("default_timeout", 30.0)),
+        invocation_persist=bool(data.get("invocation_persist", True)),
+        max_result_bytes=int(data.get("max_result_bytes", 262_144)),
+    )
+
+
+def _parse_runtime_section(data: dict[str, Any]) -> RuntimeConfig:
+    return RuntimeConfig(
+        enabled=bool(data.get("enabled", True)),
+        recover_on_start=bool(data.get("recover_on_start", True)),
+    )
+
+
+def _parse_scheduler_section(data: dict[str, Any]) -> SchedulerConfig:
+    return SchedulerConfig(
+        enabled=bool(data.get("enabled", True)),
+        timezone=str(data.get("timezone", "Asia/Shanghai")),
+        poll_interval=float(data.get("poll_interval", 1.0)),
+        max_catch_up=int(data.get("max_catch_up", 10)),
+    )
+
+
+def _parse_workspace_section(data: dict[str, Any]) -> WorkspaceConfig:
+    return WorkspaceConfig(
+        enabled=bool(data.get("enabled", True)),
+        root_dir=str(data.get("root_dir", "data/workspace")),
+        max_file_size=int(data.get("max_file_size", 1_048_576)),
+        max_read_size=int(data.get("max_read_size", 524_288)),
+    )
+
+
+def _parse_web_section(data: dict[str, Any]) -> WebConfig:
+    return WebConfig(
+        enabled=bool(data.get("enabled", True)),
+        timeout=float(data.get("timeout", 20.0)),
+        max_response_bytes=int(data.get("max_response_bytes", 2_097_152)),
+        max_redirects=int(data.get("max_redirects", 3)),
+        search_url=str(data.get("search_url", "https://html.duckduckgo.com/html/?q={query}")),
+        user_agent=str(data.get("user_agent", "qqbot-agent/1.0")),
     )
 
 
@@ -496,6 +656,13 @@ def load_config(
         raw.get("plugin", {}).get("action_queue", {})
     )
     llm = _parse_llm_section(raw.get("llm", {}))
+    artifacts = _parse_artifact_section(raw.get("artifacts", {}))
+    history = _parse_history_section(raw.get("history", {}))
+    tools = _parse_tool_platform_section(raw.get("tools", {}))
+    runtime = _parse_runtime_section(raw.get("runtime", {}))
+    scheduler = _parse_scheduler_section(raw.get("scheduler", {}))
+    workspace = _parse_workspace_section(raw.get("workspace", {}))
+    web = _parse_web_section(raw.get("web", {}))
 
     env_path = env_file if env_file else str(project_root / ".env")
     env = _load_env(Path(env_path).parent) if env_file else _load_env(project_root)
@@ -515,5 +682,12 @@ def load_config(
         filter=filter_cfg,
         action_queue=action_queue,
         llm=llm,
+        artifacts=artifacts,
+        history=history,
+        tools=tools,
+        runtime=runtime,
+        scheduler=scheduler,
+        workspace=workspace,
+        web=web,
         env=env,
     )

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, replace
 from typing import Any
 
 from loguru import logger
@@ -78,7 +79,8 @@ class AgentLoop:
             The Bot instance (for config access and message bus).
         """
         self.breaker.reset()
-        cfg = bot.config.llm
+        effective = bot.config_center.config if getattr(bot, "config_center", None) else bot.config
+        cfg = effective.llm
         session_log = LlmSessionLogger(session.session_key)
 
         max_turns = self.config.max_turns
@@ -125,26 +127,10 @@ class AgentLoop:
             assistant_tool_msg = _make_assistant_tool_msg(response.tool_calls)
             session.messages.append(assistant_tool_msg)
 
-            response_buf: dict[str, Any] = {}
-            await bot.message_bus.emit_and_wait(
-                BusMessage(
-                    type=MessageType.INTERNAL,
-                    payload={
-                        "llm_type": "tool",
-                        "session_key": session.session_key,
-                        "tool_calls": response.tool_calls,
-                        "response_buffer": response_buf,
-                        "is_group": ctx.group_id is not None,
-                        "group_id": ctx.group_id,
-                        "user_id": ctx.user_id,
-                    },
-                    source="agent_loop",
-                ),
-                bot,
-            )
+            results = await self._execute_tools(response.tool_calls, ctx, bot)
 
             # Process tool results
-            for result in response_buf.get("results", []):
+            for result in results:
                 session_log.tool_result(
                     result["call_id"],
                     result.get("name", "?"),
@@ -203,6 +189,38 @@ class AgentLoop:
             logger.info(f"LLM final reply: session={session.session_key} len={len(reply)} chars")
 
         return AgentResult(final_text=reply, turns=turn, tripped=True, tool_call_count=tool_call_count)
+
+    async def _execute_tools(
+        self, tool_calls: list[ToolCall], ctx: ToolCallContext, bot: Any
+    ) -> list[dict[str, Any]]:
+        """Execute calls directly through persisted Invocation records."""
+        results: list[dict[str, Any]] = []
+        runtime = getattr(bot, "runtime", None)
+        for call in tool_calls:
+            step_id = ctx.step_id
+            if runtime is not None and ctx.task_id and ctx.run_id:
+                step = runtime.store.create_step(
+                    ctx.run_id,
+                    "tool",
+                    input_data={"call_id": call.id, "name": call.name, "arguments": call.arguments},
+                    status="RUNNING",
+                )
+                step_id = step.step_id
+            call_ctx = replace(
+                ctx,
+                step_id=step_id,
+                invocation_id=uuid.uuid4().hex,
+            )
+            result = await self.executor.execute(call.name, call.arguments, call_ctx, bot)
+            if runtime is not None and step_id != ctx.step_id:
+                if "error" in result:
+                    runtime.store.update_step(
+                        step_id, "FAILED", output=result, error=str(result["error"])
+                    )
+                else:
+                    runtime.store.update_step(step_id, "SUCCEEDED", output=result)
+            results.append({"call_id": call.id, "name": call.name, "result": result})
+        return results
 
     # ------------------------------------------------------------------
     # helpers

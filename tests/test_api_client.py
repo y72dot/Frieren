@@ -189,3 +189,30 @@ async def test_api_call_propagates_error():
     client.set_client(_FailingNapCat())
     with pytest.raises(ConnectionError, match="network down"):
         await client.send_group_msg(group_id=1, message="x")
+
+
+@pytest.mark.asyncio
+async def test_bus_backed_client_records_all_outbound_messages(bot_config):
+    """The common QQ execution boundary persists sends from every plugin."""
+    from src.core.bot import Bot
+    from src.core.message_store import MessageStore
+
+    bot = Bot(config=bot_config)
+    bot.msg_store.close()
+    bot.msg_store = MessageStore(db_path=":memory:")
+    dummy = _DummyNapCat()
+    bot.api.set_client(dummy)
+
+    await bot.api.send_group_msg(group_id=123, message="from any plugin")
+    await bot.api.send_private_msg(user_id=456, message="private outbound")
+
+    group_record = bot.msg_store.get_message_record(1)
+    private_record = bot.msg_store.get_message_record(2)
+    assert group_record is not None
+    assert group_record["conversation_type"] == "group"
+    assert group_record["conversation_id"] == 123
+    assert group_record["is_from_bot"] == 1
+    assert private_record is not None
+    assert private_record["conversation_type"] == "private"
+    assert private_record["conversation_id"] == 456
+    assert private_record["is_from_bot"] == 1

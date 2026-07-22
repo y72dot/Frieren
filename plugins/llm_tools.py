@@ -9,7 +9,6 @@ from loguru import logger
 
 from src.core.llm.sandbox import RiskLevel
 from src.core.llm.tool_catalog import ToolCatalog, ToolDef
-from src.core.llm.tool_executor import ToolExecutor
 from src.core.llm.tool_permissions import ToolCallContext
 from src.core.message_bus import MessageType
 from src.core.message_store import StoredMessage
@@ -62,7 +61,7 @@ async def _exec_query_history(args: dict, group_id: int | None, user_id: int | N
     import datetime as _dt
     import time as _time
 
-    _UTC_OFFSET = -_time.timezone if not _time.daylight else -_time.altzone
+    utc_offset = -_time.timezone if not _time.daylight else -_time.altzone
 
     def _parse_dt(s: str) -> int:
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
@@ -74,7 +73,7 @@ async def _exec_query_history(args: dict, group_id: int | None, user_id: int | N
         else:
             raise ValueError(f"无法解析时间: {s!r}")
         delta = dt - _dt.datetime(1970, 1, 1)
-        return int(delta.total_seconds() - _UTC_OFFSET)
+        return int(delta.total_seconds() - utc_offset)
 
     msg_id = args.get("message_id")
     keyword = args.get("keyword")
@@ -84,7 +83,7 @@ async def _exec_query_history(args: dict, group_id: int | None, user_id: int | N
     time_before = args.get("time_before")
     bot_scope = args.get("bot_scope", "include")
 
-    kwargs: dict = dict(n=limit)
+    kwargs: dict = {"n": limit}
     if group_id:
         kwargs["group_id"] = group_id
         kwargs["is_group"] = True
@@ -109,7 +108,29 @@ async def _exec_query_history(args: dict, group_id: int | None, user_id: int | N
     elif bot_scope == "exclude":
         kwargs["exclude_user_ids"] = [bot.config.bot.qq]
 
-    msgs = bot.msg_store.query(**kwargs)
+    coverage = "unknown"
+    gaps: list[dict] = []
+    history_query = getattr(bot, "history_query", None)
+    if history_query is not None:
+        ensure_history = getattr(bot, "ensure_history_services", None)
+        if ensure_history is not None:
+            ensure_history()
+            history_query = bot.history_query
+        conversation_type = "group" if group_id else "private"
+        conversation_id = group_id if group_id else user_id
+        criteria = {
+            key: value
+            for key, value in kwargs.items()
+            if key not in {"group_id", "is_group"}
+        }
+        result = await history_query.query(
+            conversation_type, int(conversation_id or 0), **criteria
+        )
+        msgs = result.messages
+        coverage = result.coverage
+        gaps = result.gaps
+    else:
+        msgs = bot.msg_store.query(**kwargs)
 
     has_other_filters = bool(keyword or uid is not None or time_after is not None or time_before is not None)
     if not msgs and msg_id is not None and not has_other_filters:
@@ -129,12 +150,16 @@ async def _exec_query_history(args: dict, group_id: int | None, user_id: int | N
             pass
 
     if not msgs:
-        return {"text": "没有找到相关消息。"}
+        return {"text": "没有找到相关消息。", "coverage": coverage, "gaps": gaps}
 
     from plugins.llm_memory import _format_msg
 
     lines = [_format_msg(m, bot.config.bot.qq, include_time=True) for m in msgs if m.content.strip()]
-    return {"text": "找到以下消息：\n" + "\n".join(lines)}
+    return {
+        "text": "找到以下消息：\n" + "\n".join(lines),
+        "coverage": coverage,
+        "gaps": gaps,
+    }
 
 
 async def _exec_tool_help(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
@@ -295,9 +320,9 @@ async def _exec_resolve_forward(args: dict, group_id: int | None, user_id: int |
 # Tool catalog registration
 # ---------------------------------------------------------------------------
 
-_catalog = ToolCatalog()
+_tool_defs: list[ToolDef] = []
 
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="set_essence",
     description="将一条消息设为群精华消息",
     parameters={
@@ -309,7 +334,7 @@ _catalog.register(ToolDef(
     category="management",
     executor=_exec_set_essence,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="remove_essence",
     description="取消一条群精华消息",
     parameters={
@@ -321,7 +346,7 @@ _catalog.register(ToolDef(
     category="management",
     executor=_exec_remove_essence,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="react_emoji",
     description="对一条消息进行表情反应/点赞",
     parameters={
@@ -336,7 +361,7 @@ _catalog.register(ToolDef(
     category="interaction",
     executor=_exec_react_emoji,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="send_message",
     description="发送消息到当前群聊或私聊（用于需要单独通知的场景）",
     parameters={
@@ -348,7 +373,7 @@ _catalog.register(ToolDef(
     category="interaction",
     executor=_exec_send_message,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="mute_user",
     description="禁言群成员",
     parameters={
@@ -363,7 +388,7 @@ _catalog.register(ToolDef(
     category="management",
     executor=_exec_mute_user,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="kick_user",
     description="踢出群成员",
     parameters={
@@ -375,7 +400,7 @@ _catalog.register(ToolDef(
     category="management",
     executor=_exec_kick_user,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="get_current_time",
     description="获取当前日期时间 (YYYY-MM-DD HH:MM:SS)。查询时间段时先调用此工具。",
     parameters={"type": "object", "properties": {}, "required": []},
@@ -384,7 +409,7 @@ _catalog.register(ToolDef(
     executor=_exec_get_current_time,
     cache_ttl=5.0,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="query_history",
     description="查询聊天记录。需要了解上下文时主动调用。默认返回当前群聊最近30条消息（含所有成员及bot）。\n使用场景：\n- 了解最近在聊什么 → 直接调用，不传参数\n- 查询某个用户 → 传 user_id\n- 查询时间段 → 传 time_after + time_before 圈定范围\n- 搜索关键词 → 传 keyword\n- 只看bot自己的消息 → bot_scope=only\n- 查某条消息详情 → 传 message_id",
     parameters={
@@ -404,7 +429,7 @@ _catalog.register(ToolDef(
     category="query",
     executor=_exec_query_history,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="tool_help",
     description="获取所有可用工具的参数说明和使用示例。不确定某个工具怎么用或参数含义时调用此工具。也可用 tool_name=\"chain_guide\" 查看工具链式调用指南，用 tool_name=\"decision_guide\" 查看常见任务的工具组合建议。",
     parameters={
@@ -416,7 +441,7 @@ _catalog.register(ToolDef(
     category="cognition",
     executor=_exec_tool_help,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="resolve_forward",
     description="解析合并转发消息的具体内容。当消息显示为 [合并转发 xxx] 时调用此工具获取其中的对话内容。支持嵌套转发。",
     parameters={
@@ -428,7 +453,7 @@ _catalog.register(ToolDef(
     category="perception",
     executor=_exec_resolve_forward,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="get_group_info",
     description="获取群聊详细信息：群名、人数、创建时间等。用于了解群组基本情况。",
     parameters={"type": "object", "properties": {}, "required": []},
@@ -436,7 +461,7 @@ _catalog.register(ToolDef(
     category="query",
     executor=_exec_get_group_info,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="get_member_info",
     description="查询群成员的群名片、QQ号、角色(owner/admin/member)。需要了解某人身份时调用。",
     parameters={
@@ -448,7 +473,7 @@ _catalog.register(ToolDef(
     category="query",
     executor=_exec_get_member_info,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="get_member_list",
     description="获取群成员完整列表，了解群内有哪些人、谁在活跃。结果可能较大，会返回摘要。",
     parameters={"type": "object", "properties": {}, "required": []},
@@ -456,7 +481,7 @@ _catalog.register(ToolDef(
     category="query",
     executor=_exec_get_member_list,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="get_essence_list",
     description="获取群精华消息列表，了解群里哪些消息被标记为精华。",
     parameters={"type": "object", "properties": {}, "required": []},
@@ -464,7 +489,7 @@ _catalog.register(ToolDef(
     category="query",
     executor=_exec_get_essence_list,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="get_shut_list",
     description="获取当前群禁言列表，查看哪些成员被禁言及剩余时长。",
     parameters={"type": "object", "properties": {}, "required": []},
@@ -472,7 +497,7 @@ _catalog.register(ToolDef(
     category="query",
     executor=_exec_get_shut_list,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="set_group_card",
     description="修改群成员的群名片。需要修改某人的群昵称时调用。",
     parameters={
@@ -487,7 +512,7 @@ _catalog.register(ToolDef(
     category="management",
     executor=_exec_set_group_card,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="delete_msg",
     description="撤回一条消息。注意：只能撤回bot自己发送的消息或bot是管理员时撤回他人消息。",
     parameters={
@@ -499,7 +524,7 @@ _catalog.register(ToolDef(
     category="management",
     executor=_exec_delete_msg,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="whole_ban",
     description="开启或关闭全员禁言。需要bot是群主。",
     parameters={
@@ -512,7 +537,7 @@ _catalog.register(ToolDef(
     executor=_exec_whole_ban,
     requires_admin=True,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="set_admin",
     description="设置或取消群管理员。需要bot是群主。",
     parameters={
@@ -528,7 +553,7 @@ _catalog.register(ToolDef(
     executor=_exec_set_admin,
     requires_admin=True,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="send_poke",
     description="戳一戳群成员，用于轻量互动或吸引注意。",
     parameters={
@@ -540,7 +565,7 @@ _catalog.register(ToolDef(
     category="interaction",
     executor=_exec_send_poke,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="send_like",
     description="给用户点赞（私聊场景为主）。",
     parameters={
@@ -555,7 +580,7 @@ _catalog.register(ToolDef(
     category="interaction",
     executor=_exec_send_like,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="ocr_image",
     description="OCR识别图片中的文字。当用户发送图片并要求识别或询问图片内容时调用。注：仅Windows端NapCat支持。",
     parameters={
@@ -567,7 +592,7 @@ _catalog.register(ToolDef(
     category="perception",
     executor=_exec_ocr_image,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="voice_to_text",
     description="将语音消息转为文字。当用户发送语音需要了解说了什么时调用。",
     parameters={
@@ -579,7 +604,7 @@ _catalog.register(ToolDef(
     category="perception",
     executor=_exec_voice_to_text,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="think",
     description="在执行复杂操作前梳理思路。常用于需要多步推理的场景：分析问题→收集信息→决策→执行。详细的工具链式调用指南请见 tool_help(tool_name=\"chain_guide\")。思考内容仅自己可见。",
     parameters={
@@ -591,7 +616,7 @@ _catalog.register(ToolDef(
     category="cognition",
     executor=_exec_think,
 ))
-_catalog.register(ToolDef(
+_tool_defs.append(ToolDef(
     name="query_character",
     description="查询葬送的芙莉莲世界观的人物设定、关系、魔法、历史等背景知识。当你需要了解某个人物、事件、魔法或世界观细节时调用。",
     parameters={
@@ -605,10 +630,13 @@ _catalog.register(ToolDef(
 ))
 
 # Backward-compatible TOOL_DEFS export
-TOOL_DEFS: list[dict[str, Any]] = _catalog.get_all_defs()
+TOOL_DEFS: list[dict[str, Any]] = [tool.to_openai_schema() for tool in _tool_defs]
 
-# ToolExecutor instance for the handler
-_executor = ToolExecutor(_catalog)
+
+def register_llm_tools(catalog: ToolCatalog) -> None:
+    """Register built-in definitions into one Bot catalog."""
+    for tool in _tool_defs:
+        catalog.register(tool)
 
 
 # ---------------------------------------------------------------------------
@@ -628,11 +656,27 @@ async def llm_tools_handler(payload: dict[str, Any], bot) -> bool:
     user_id: int | None = payload.get("user_id")
 
     # Build permission context
+    ensure_platform = getattr(bot, "ensure_tool_platform", None)
+    if ensure_platform is not None:
+        ensure_platform()
+    executor = getattr(bot, "tool_executor", None)
+    if executor is None:
+        catalog = ToolCatalog()
+        register_llm_tools(catalog)
+        from src.core.llm.tool_executor import ToolExecutor
+
+        executor = ToolExecutor(catalog)
+
     user_is_admin = user_id in bot.config.bot.admin_users if user_id else False
     ctx = ToolCallContext(
         user_id=user_id or 0,
         group_id=group_id,
         user_is_admin=user_is_admin,
+        task_id=str(payload.get("task_id", "")) or None,
+        run_id=str(payload.get("run_id", "")) or str(payload.get("session_key", "")) or None,
+        step_id=str(payload.get("step_id", "")) or None,
+        trace_id=str(payload.get("trace_id", "")),
+        config_snapshot_id=str(payload.get("config_snapshot_id", "")),
     )
 
     results: list[dict] = []
@@ -649,7 +693,7 @@ async def llm_tools_handler(payload: dict[str, Any], bot) -> bool:
             raw_args = fn.get("arguments", "{}")
             args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
         try:
-            result = await _executor.execute(name, args, ctx, bot)
+            result = await executor.execute(name, args, ctx, bot)
         except Exception as e:
             logger.opt(exception=True).error(f"Tool '{name}' execution failed: {e}")
             result = {"error": str(e)}
@@ -1066,7 +1110,7 @@ def _query_character(keyword: str) -> dict:
     idx = -1
     lines = full_text.split("\n")
     char_pos = 0
-    for i, line in enumerate(lines):
+    for line in lines:
         if line.strip() == kw:
             idx = char_pos
             break

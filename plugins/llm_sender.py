@@ -38,7 +38,7 @@ async def llm_sender_handler(payload: dict[str, Any], bot) -> bool:
         if is_group:
             response = await bot.api.send_group_msg(target_id, chunk)
             msg_id = response.get("message_id") if isinstance(response, dict) else None
-            if msg_id is not None:
+            if msg_id is not None and not getattr(bot.api, "records_outbound", False):
                 bot.msg_store.record_bot_message(
                     message_id=msg_id,
                     group_id=target_id,
@@ -51,7 +51,7 @@ async def llm_sender_handler(payload: dict[str, Any], bot) -> bool:
         else:
             response = await bot.api.send_private_msg(target_id, chunk)
             msg_id = response.get("message_id") if isinstance(response, dict) else None
-            if msg_id is not None:
+            if msg_id is not None and not getattr(bot.api, "records_outbound", False):
                 bot.msg_store.record_bot_message(
                     message_id=msg_id,
                     group_id=None,
@@ -60,6 +60,7 @@ async def llm_sender_handler(payload: dict[str, Any], bot) -> bool:
                     content=chunk,
                     time=int(time()),
                     is_group=False,
+                    peer_id=target_id,
                 )
 
     return False

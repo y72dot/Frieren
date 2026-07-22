@@ -37,9 +37,22 @@ class ApiClientProtocol(Protocol):
     ) -> dict[str, Any]: ...
     async def get_msg(self, message_id: int) -> dict[str, Any]: ...
     async def get_forward_msg(self, forward_id: str) -> dict[str, Any]: ...
+    async def get_group_msg_history(
+        self, group_id: int, message_seq: int | None = None, count: int = 20
+    ) -> dict[str, Any]: ...
+    async def get_friend_msg_history(
+        self, user_id: int, message_seq: int | None = None, count: int = 20
+    ) -> dict[str, Any]: ...
     async def set_essence_msg(self, message_id: int) -> dict[str, Any]: ...
     async def delete_essence_msg(self, message_id: int) -> dict[str, Any]: ...
     async def call_action(self, action: str, **params: Any) -> dict[str, Any]: ...
+    async def get_file(self, file_id: str) -> dict[str, Any]: ...
+    async def upload_group_file(
+        self, group_id: int, file: str, name: str, folder: str | None = None
+    ) -> dict[str, Any]: ...
+    async def upload_private_file(
+        self, user_id: int, file: str, name: str
+    ) -> dict[str, Any]: ...
 
 
 class ApiClient:
@@ -50,6 +63,8 @@ class ApiClient:
     chain).  Without a bus (e.g. during tests) they call the napcat
     client directly.
     """
+
+    records_outbound = True
 
     def __init__(self, bus: MessageBus | None = None) -> None:
         self._client: Any = None
@@ -119,7 +134,53 @@ class ApiClient:
         Used by the built-in ``_qq_exec`` handler to perform the
         actual napcat API invocation without re-entering the bus.
         """
-        return await self._call(action, **params)
+        result = await self._call(action, **params)
+        self._record_outbound_message(action, params, result)
+        return result
+
+    def _record_outbound_message(
+        self,
+        action: str,
+        params: dict[str, Any],
+        result: dict[str, Any],
+    ) -> None:
+        """Persist every successful text send at the common NapCat boundary."""
+        if action not in {"send_group_msg", "send_private_msg"} or self._bot is None:
+            return
+        message_id = result.get("message_id")
+        if message_id is None and isinstance(result.get("data"), dict):
+            message_id = result["data"].get("message_id")
+        if message_id is None:
+            return
+        message = params.get("message")
+        if not isinstance(message, str):
+            return
+        try:
+            config = (
+                self._bot.config_center.config
+                if self._bot.config_center
+                else self._bot.config
+            )
+            bot_qq = config.bot.qq
+            nickname = config.bot.nickname[0] if config.bot.nickname else str(bot_qq)
+            is_group = action == "send_group_msg"
+            peer_id = None if is_group else int(params["user_id"])
+            self._bot.msg_store.record_bot_message(
+                message_id=int(message_id),
+                group_id=int(params["group_id"]) if is_group else None,
+                user_id=bot_qq,
+                nickname=nickname,
+                content=message,
+                time=int(_time.time()),
+                is_group=is_group,
+                peer_id=peer_id,
+            )
+        except Exception:
+            # QQ action already succeeded; storage failure is observable but must
+            # not turn a successful send into a retry that duplicates the message.
+            logger.opt(exception=True).error(
+                f"Failed to persist outbound message: action={action} id={message_id}"
+            )
 
     # ------------------------------------------------------------------
     # helpers
@@ -223,6 +284,80 @@ class ApiClient:
     async def get_forward_msg(self, forward_id: str) -> dict[str, Any]:
         """Retrieve the content of a merged-forward message by its forward ID."""
         return await self._dispatch_action("get_forward_msg", message_id=forward_id)
+
+    # ------------------------------------------------------------------
+    # files
+    # ------------------------------------------------------------------
+
+    async def get_file(self, file_id: str) -> dict[str, Any]:
+        return await self._dispatch_action("get_file", file=file_id, file_id=file_id)
+
+    async def get_image(self, file_id: str) -> dict[str, Any]:
+        return await self._dispatch_action("get_image", file=file_id, file_id=file_id)
+
+    async def get_record(self, file_id: str, out_format: str = "mp3") -> dict[str, Any]:
+        return await self._dispatch_action(
+            "get_record", file=file_id, file_id=file_id, out_format=out_format
+        )
+
+    async def get_recent_contact(self, count: int = 50) -> dict[str, Any]:
+        return await self._dispatch_action("get_recent_contact", count=count)
+
+    async def get_group_msg_history(
+        self, group_id: int, message_seq: int | None = None, count: int = 20
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "group_id": group_id,
+            "count": count,
+            "reverse_order": False,
+            "reverseOrder": False,
+            "disable_get_url": False,
+            "parse_mult_msg": True,
+            "quick_reply": False,
+        }
+        if message_seq is not None:
+            params["message_seq"] = message_seq
+        return await self._dispatch_action("get_group_msg_history", **params)
+
+    async def get_friend_msg_history(
+        self, user_id: int, message_seq: int | None = None, count: int = 20
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "user_id": user_id,
+            "count": count,
+            "reverse_order": False,
+            "reverseOrder": False,
+            "disable_get_url": False,
+            "parse_mult_msg": True,
+            "quick_reply": False,
+        }
+        if message_seq is not None:
+            params["message_seq"] = message_seq
+        return await self._dispatch_action("get_friend_msg_history", **params)
+
+    async def upload_group_file(
+        self, group_id: int, file: str, name: str, folder: str | None = None
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "group_id": group_id,
+            "file": file,
+            "name": name,
+            "upload_file": True,
+        }
+        if folder:
+            params["folder"] = folder
+        return await self._dispatch_action("upload_group_file", **params)
+
+    async def upload_private_file(
+        self, user_id: int, file: str, name: str
+    ) -> dict[str, Any]:
+        return await self._dispatch_action(
+            "upload_private_file",
+            user_id=user_id,
+            file=file,
+            name=name,
+            upload_file=True,
+        )
 
     # ------------------------------------------------------------------
     # essence

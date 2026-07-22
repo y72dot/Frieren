@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from src.core.llm.sandbox import RiskLevel
 
@@ -20,6 +21,14 @@ class ToolDef:
     executor: Callable          # async callable(args, group_id, user_id, bot) -> dict
     requires_admin: bool = False
     cache_ttl: float = 0        # result cache TTL in seconds, 0 = no cache
+    version: str = "1.0.0"
+    output_schema: dict[str, Any] = field(default_factory=dict)
+    effects: set[str] = field(default_factory=set)
+    scopes: set[str] = field(default_factory=set)
+    timeout_seconds: float | None = None
+    idempotency: str = "none"  # none | keyed
+    approval: str = "none"  # none | required
+    provider: str = "builtin"
 
     def to_openai_schema(self) -> dict[str, Any]:
         """Return the OpenAI function-calling schema dict for this tool."""
@@ -29,6 +38,7 @@ class ToolDef:
                 "name": self.name,
                 "description": self.description,
                 "parameters": self.parameters,
+                "x-tool-version": self.version,
             },
         }
 
@@ -43,6 +53,14 @@ class ToolCatalog:
 
     def register(self, tool: ToolDef) -> None:
         """Add or replace a tool definition."""
+        if not tool.effects:
+            tool.effects = {
+                RiskLevel.READ_ONLY: {"read"},
+                RiskLevel.WRITE: {"write"},
+                RiskLevel.DESTRUCTIVE: {"destructive"},
+            }[tool.risk_level]
+        if tool.risk_level != RiskLevel.READ_ONLY and tool.idempotency == "none":
+            tool.idempotency = "keyed"
         self._tools[tool.name] = tool
 
     def unregister(self, name: str) -> None:

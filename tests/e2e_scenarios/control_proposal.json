@@ -1,0 +1,54 @@
+{
+  "name": "control_proposal_no_self_approval",
+  "llm": {
+    "responses": [
+      {
+        "tool_calls": [
+          {
+            "id": "proposal-1",
+            "name": "settings_propose",
+            "arguments": {
+              "changes": {"web.timeout": 12.0},
+              "reason": "端到端验证"
+            }
+          }
+        ]
+      },
+      {"text": "设置提案已提交，等待独立审批。"}
+    ]
+  },
+  "actions": [
+    {
+      "dispatch": {
+        "post_type": "message",
+        "message_type": "group",
+        "message_id": 81003,
+        "group_id": 456,
+        "user_id": 111,
+        "self_id": 123456,
+        "time": 1784600002,
+        "raw_message": "[CQ:at,qq=123456] 把网页超时改成12秒",
+        "message": [
+          {"type": "at", "data": {"qq": "123456"}},
+          {"type": "text", "data": {"text": " 把网页超时改成12秒"}}
+        ],
+        "sender": {"nickname": "管理员"}
+      }
+    }
+  ],
+  "expect": {
+    "proposal": {
+      "kind": "settings",
+      "status": "pending",
+      "effective_settings": {"web.timeout": 20.0}
+    },
+    "runtime": {
+      "task_status": "SUCCEEDED",
+      "run_status": "SUCCEEDED",
+      "tool_names": ["settings_propose"]
+    },
+    "qq_calls": [
+      {"method": "send_group_msg", "group_id": 456, "message": "设置提案已提交，等待独立审批。"}
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+version = "2026.07.1"
+
+[profiles.default]
+parts = [
+  "identity",
+  "behavior",
+  "qq_context",
+  "tool_policy",
+  "memory_policy",
+  "response_style",
+]
+
+[profiles.planner]
+extends = "default"
+append = ["task_planner"]
+
+[profiles.summarizer]
+parts = ["summarizer"]
+
+[profiles.fact_extractor]
+parts = ["fact_extractor"]

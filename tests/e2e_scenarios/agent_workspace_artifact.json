@@ -1,0 +1,54 @@
+{
+  "name": "agent_workspace_artifact",
+  "llm": {
+    "responses": [
+      {
+        "tool_calls": [
+          {
+            "id": "write-1",
+            "name": "workspace_write",
+            "arguments": {
+              "path": "reports/e2e.txt",
+              "content": "由端到端场景创建",
+              "export_artifact": true
+            }
+          }
+        ]
+      },
+      {"text": "端到端文件已创建。"}
+    ]
+  },
+  "actions": [
+    {
+      "dispatch": {
+        "post_type": "message",
+        "message_type": "group",
+        "message_id": 81002,
+        "group_id": 456,
+        "user_id": 111,
+        "self_id": 123456,
+        "time": 1784600001,
+        "raw_message": "[CQ:at,qq=123456] 创建端到端报告",
+        "message": [
+          {"type": "at", "data": {"qq": "123456"}},
+          {"type": "text", "data": {"text": " 创建端到端报告"}}
+        ],
+        "sender": {"nickname": "管理员"}
+      }
+    }
+  ],
+  "expect": {
+    "workspace_files": {"reports/e2e.txt": "由端到端场景创建"},
+    "artifacts": [
+      {"file_name": "e2e.txt", "source_type": "workspace", "status": "available"}
+    ],
+    "runtime": {
+      "task_status": "SUCCEEDED",
+      "run_status": "SUCCEEDED",
+      "tool_names": ["workspace_write"]
+    },
+    "qq_calls": [
+      {"method": "send_group_msg", "group_id": 456, "message": "端到端文件已创建。"}
+    ]
+  }
+}

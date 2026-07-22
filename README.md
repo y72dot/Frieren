@@ -33,21 +33,11 @@ git clone https://github.com/y72dot/Frieren.git
 cd Frieren
 ```
 
-### 2. 创建实例配置
+### 2. 配置唯一 Bot
 
-项目已内置 `frieren` 实例（QQ=3632757457）作为参考。如果要使用新的 QQ 号，需要创建专属实例：
+项目按一个完整 Bot 个体部署。仓库内置 `frieren` 配置（QQ=3632757457）作为参考；更换账号时直接替换该部署配置，不并行复制多 Bot 工作区：
 
-```bash
-# 复制 Bot 配置
-mkdir -p instances/mybot
-cp config/bot.toml instances/mybot/bot.toml
-cp .env.example instances/mybot/.env
-
-# 复制 NapCat 配置
-cp -r instances/napcat-frieren/config instances/napcat-mybot/config
-```
-
-修改 `instances/mybot/bot.toml` 中的关键字段：
+修改 `instances/frieren/bot.toml` 中的关键字段：
 ```toml
 [bot]
 qq = <你的QQ号>
@@ -55,19 +45,19 @@ nickname = "<机器人昵称>"
 admin_users = [<你的QQ号>]
 
 [napcat]
-ws_url = "ws://napcat-mybot:3001"    # 与 docker-compose 服务名一致
+ws_url = "ws://napcat-frieren:3001"  # 与 docker-compose 服务名一致
 
 [plugin]
 plugin_dirs = ["/app/plugins"]         # Docker 内部路径
 ```
 
-修改 NapCat 配置中所有 `3632757457` 改为你的 QQ 号，并在 `docker-compose.yml` 中新增对应的服务对。
+将 NapCat 配置和 `docker-compose.yml` 中的示例 QQ 号 `3632757457` 替换为实际账号。
 
 ### 3. 填写环境变量
 
 ```bash
-# 如果 instances/<name>/.env 不存在会自动从 .env.example 复制
-vim instances/mybot/.env
+# 如果该文件不存在，先从 .env.example 复制
+vim instances/frieren/.env
 ```
 
 ```env
@@ -189,7 +179,7 @@ qqbot/
 │   └── essence.py             # 群精华消息管理（设精 / 寸止）
 ├── config/
 │   └── bot.toml               # 默认本地开发配置
-├── instances/                 # 多实例配置（每个 QQ 号一份）
+├── instances/                 # 唯一 Bot 的部署状态
 │   ├── frieren/               # Bot 配置 + .env
 │   └── napcat-frieren/        # NapCatQQ 配置 + QQ 会话
 ├── scripts/
@@ -309,6 +299,27 @@ retention = "14 days"
 | `NAPCAT_REVERSE_PORT` | 覆盖反向模式端口 |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key（从 `.env` 加载） |
 
-## 多实例扩展
+## 测试与发布门禁
 
-每个 QQ 号需要一对服务。在 `docker-compose.yml` 中复制 `napcat-frieren` + `qqbot-frieren` 服务对，替换名称和端口即可。配置和运行时数据完全隔离。
+```bash
+# 完整单元与集成测试
+pytest -q
+
+# L0-L5 分层 E2E，并生成 data/test-reports/e2e-report.json
+python scripts/run_e2e.py
+
+# Docker 中运行相同 E2E 矩阵
+docker compose --profile test run --rm e2e
+
+# 性能基线
+python scripts/benchmark.py --enforce
+```
+
+真实 QQ 验收属于 L6，需要明确授权并提供测试群：
+
+```bash
+QQBOT_LIVE=1 NAPCAT_WS_URL=ws://127.0.0.1:3001 \
+QQBOT_LIVE_GROUP_ID=123456 python scripts/run_e2e.py --levels L6 --require-live
+```
+
+L6 会发送带时间戳的验收消息并从群历史中确认，设置 `QQBOT_LIVE_ARTIFACT` 时还会上传指定测试文件。不要对生产群直接执行该门禁。

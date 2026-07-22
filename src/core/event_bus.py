@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from src.adapters.qq import (
+    extract_message_array,
+    extract_raw_message,
+    serialize_raw_event,
+)
 from src.core.message_bus import BusMessage, MessageType
 from src.plugin.base import Event
 
@@ -69,7 +75,9 @@ class EventBus:
         """
         # typed message events (napcat-sdk >= 0.1)
         if GroupMessageEvent is not None and isinstance(raw_event, GroupMessageEvent):
-            msg_text = raw_event.raw_message or ""
+            raw_message = extract_raw_message(raw_event)
+            message_array = extract_message_array(raw_event)
+            msg_text = raw_message
             if not msg_text:
                 fwd_id = _extract_forward_id(raw_event)
                 if fwd_id:
@@ -82,12 +90,17 @@ class EventBus:
                 message=msg_text,
                 group_id=int(raw_event.group_id),
                 is_group=True,
+                raw_message=raw_message,
+                message_array=message_array,
+                raw_event_json=serialize_raw_event(raw_event),
             )
 
         if PrivateMessageEvent is not None and isinstance(
             raw_event, PrivateMessageEvent
         ):
-            msg_text = raw_event.raw_message or ""
+            raw_message = extract_raw_message(raw_event)
+            message_array = extract_message_array(raw_event)
+            msg_text = raw_message
             if not msg_text:
                 fwd_id = _extract_forward_id(raw_event)
                 if fwd_id:
@@ -99,6 +112,10 @@ class EventBus:
                 message_id=int(raw_event.message_id),
                 message=msg_text,
                 is_group=False,
+                peer_id=int(raw_event.user_id),
+                raw_message=raw_message,
+                message_array=message_array,
+                raw_event_json=serialize_raw_event(raw_event),
             )
 
         # typed notice events (napcat-sdk)
@@ -118,8 +135,9 @@ class EventBus:
         if post_type == "message":
             msg_type = data.get("message_type", "")
             group_id = data.get("group_id")
-            raw_msg = data.get("raw_message", "")
-            msg_text = str(raw_msg) if raw_msg else ""
+            raw_message = extract_raw_message(data)
+            message_array = extract_message_array(data)
+            msg_text = raw_message
             if not msg_text:
                 fwd_id = _extract_forward_id(data)
                 if fwd_id:
@@ -137,6 +155,10 @@ class EventBus:
                 message=msg_text,
                 group_id=int(group_id) if group_id is not None else None,
                 is_group=msg_type == "group",
+                peer_id=int(data.get("user_id", 0)) if msg_type == "private" else None,
+                raw_message=raw_message,
+                message_array=message_array,
+                raw_event_json=serialize_raw_event(data),
             )
         elif post_type == "notice":
             notice_type = data.get("notice_type", "")
@@ -149,6 +171,7 @@ class EventBus:
                 user_id=int(user_id) if user_id else 0,
                 group_id=int(group_id) if group_id is not None else None,
                 is_group=group_id is not None,
+                raw_event_json=serialize_raw_event(data),
             )
         elif post_type == "request":
             req_type = data.get("request_type", "")
@@ -162,6 +185,7 @@ class EventBus:
                 if (gid := data.get("group_id")) is not None
                 else None,
                 is_group=gid is not None,
+                raw_event_json=serialize_raw_event(data),
             )
         elif post_type == "meta_event":
             meta_type = data.get("meta_event_type", "")
@@ -170,6 +194,7 @@ class EventBus:
                 type=f"meta.{meta_type}",
                 raw=data,
                 user_id=0,
+                raw_event_json=serialize_raw_event(data),
             )
         logger.debug(f"Unknown dict post_type={post_type!r}, discarding")
         return None
@@ -185,11 +210,36 @@ class EventBus:
             user_id=user_id,
             group_id=int(group_id) if group_id is not None else None,
             is_group=group_id is not None,
+            raw_event_json=serialize_raw_event(raw_event),
         )
 
     # ------------------------------------------------------------------
     # dispatch
     # ------------------------------------------------------------------
+
+    def recover_unprojected(self, bot: Bot, limit: int = 1000) -> int:
+        """Replay journaled events whose message projection did not finish."""
+        recovered = 0
+        for row in bot.msg_store.unprojected_events(limit=limit):
+            try:
+                raw_event = json.loads(row["raw_json"])
+                event = self.parse(raw_event)
+                if event is None:
+                    logger.warning(
+                        f"Cannot replay journal event {row['event_id']}: unsupported type"
+                    )
+                    continue
+                event.ingestion_source = row["source"]
+                event.raw_event_json = row["raw_json"]
+                bot.msg_store.record(event, trace_id=row.get("trace_id", ""))
+                recovered += 1
+            except Exception:
+                logger.opt(exception=True).error(
+                    f"Failed to replay journal event {row['event_id']}"
+                )
+        if recovered:
+            logger.info(f"Recovered {recovered} unprojected event(s)")
+        return recovered
 
     async def dispatch(self, raw_event: Any, bot: Bot) -> None:
         """Parse *raw_event* and route through the message bus.
@@ -204,27 +254,37 @@ class EventBus:
         """
         event = self.parse(raw_event)
         if event is None:
+            bot.msg_store.record_raw_event(raw_event, event_type="unhandled")
             logger.debug(
                 f"Event parse returned None, discarding: {type(raw_event).__name__}"
             )
             return
 
-        # Record message in the persistent store (before dispatch so plugins can query it).
-        bot.msg_store.record(event)
+        # Create the request envelope before persistence so the same trace ID is
+        # stored in the Event Journal and carried through plugin dispatch.
+        msg = BusMessage(
+            type=MessageType.EXTERNAL,
+            payload=event,
+            source="event_bus",
+        )
+        bot.msg_store.record(event, trace_id=msg.trace_id)
+        if event.message_id is not None:
+            discover = getattr(bot, "discover_message_artifacts", None)
+            if discover is not None:
+                discover(event.message_id)
+            elif getattr(bot, "artifact_store", None):
+                bot.artifact_store.discover_message(event.message_id)
 
         extra = []
         if event.group_id:
             extra.append(f"group={event.group_id}")
         msg_preview = event.message[:200] if event.message else ""
         extra.append(f"msg='{msg_preview}'")
-        logger.info(f"REQUEST START: {event.type} user={event.user_id} {' '.join(extra)}")
-
-        # Phase 2: route through the message bus.
-        msg = BusMessage(
-            type=MessageType.EXTERNAL,
-            payload=event,
-            source="event_bus",
+        logger.info(
+            f"REQUEST START: {event.type} user={event.user_id} {' '.join(extra)}"
         )
+
+        # Route only after durable event and message projection commits.
         consumed = await bot.message_bus.dispatch(msg, bot)
 
         # Flush queued messages (ACTION / INTERNAL emitted by plugins).

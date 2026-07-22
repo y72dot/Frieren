@@ -1,0 +1,39 @@
+{
+  "name": "lossless_unknown_cq",
+  "actions": [
+    {
+      "dispatch": {
+        "post_type": "message",
+        "message_type": "group",
+        "message_id": 81001,
+        "group_id": 456,
+        "user_id": 222,
+        "self_id": 123456,
+        "time": 1784600000,
+        "raw_message": "说明[CQ:file,file=报告.xlsx,file_id=f-81001][CQ:future,value=x]",
+        "message": [
+          {"type": "text", "data": {"text": "说明"}},
+          {"type": "file", "data": {"file": "报告.xlsx", "file_id": "f-81001", "unknown": 7}},
+          {"type": "future", "data": {"nested": [1, 2, 3]}}
+        ],
+        "sender": {"nickname": "测试者"},
+        "future_event_field": {"preserved": true}
+      }
+    }
+  ],
+  "expect": {
+    "messages": [
+      {
+        "message_id": 81001,
+        "raw_message": "说明[CQ:file,file=报告.xlsx,file_id=f-81001][CQ:future,value=x]",
+        "ingestion_source": "live",
+        "message_array": [
+          {"type": "text", "data": {"text": "说明"}},
+          {"type": "file", "data": {"file": "报告.xlsx", "file_id": "f-81001", "unknown": 7}},
+          {"type": "future", "data": {"nested": [1, 2, 3]}}
+        ],
+        "raw_event_contains": {"future_event_field": {"preserved": true}}
+      }
+    ]
+  }
+}

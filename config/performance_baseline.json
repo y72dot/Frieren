@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "minimum_ingest_messages_per_second": 250,
+  "maximum_search_p95_ms": 100
+}
