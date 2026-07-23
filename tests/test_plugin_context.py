@@ -299,7 +299,7 @@ class TestPluginContext:
         msg, b = bus.dispatched[0]
         assert msg.type.value == "internal"
         assert msg.payload["topic"] == "test.topic"
-        assert msg.payload["data"] == {"key": "val"}
+        assert msg.payload["key"] == "val"
 
     @pytest.mark.asyncio
     async def test_emit_internal_noop_without_bus(self):

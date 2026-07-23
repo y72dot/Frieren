@@ -57,10 +57,9 @@ class SafeWebClient:
         timeout: float = 20.0,
         max_response_bytes: int = 2_097_152,
         max_redirects: int = 3,
-        search_url: str = "https://search.yahoo.com/search?p={query}",
+        search_url: str = "https://www.bing.com/search?setlang={lang}&q={query}",
         news_search_url: str = (
-            "https://www.bing.com/news/search?format=rss&setlang={lang}"
-            "&cc={country}&mkt={market}&q={query}"
+            "https://www.bing.com/news/search?format=rss&setlang={lang}&q={query}"
         ),
         search_fallback_urls: list[str] | None = None,
         user_agent: str = "qqbot-agent/1.0",
@@ -76,11 +75,7 @@ class SafeWebClient:
         self.search_fallback_urls = list(
             search_fallback_urls
             if search_fallback_urls is not None
-            else [
-                "https://www.bing.com/search?setlang={lang}&cc={country}"
-                "&mkt={market}&q={query}",
-                "https://html.duckduckgo.com/html/?q={query}",
-            ]
+            else ["https://html.duckduckgo.com/html/?q={query}"]
         )
         self.user_agent = user_agent
         self.resolver = resolver or _resolve
@@ -109,7 +104,7 @@ class SafeWebClient:
                 failures.append(f"{urlparse(url).hostname}: {exc}")
                 continue
             mime = response.headers.get("content-type", "").split(";", 1)[0].lower()
-            if "xml" in mime or "format=rss" in final_url:
+            if "xml" in mime:
                 raw_results = _parse_rss_results(content)
             else:
                 hostname = urlparse(final_url).hostname or ""

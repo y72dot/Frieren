@@ -89,7 +89,7 @@ class ActionQueueConfig:
         default_factory=lambda: [
             "send_group_msg",
             "send_private_msg",
-            "send_group_poke",
+            "group_poke",
             "send_group_forward_msg",
             "set_group_ban",
             "set_group_kick",
@@ -228,17 +228,10 @@ class WebConfig:
     timeout: float = 20.0
     max_response_bytes: int = 2_097_152
     max_redirects: int = 3
-    search_url: str = "https://search.yahoo.com/search?p={query}"
-    news_search_url: str = (
-        "https://www.bing.com/news/search?format=rss&setlang={lang}"
-        "&cc={country}&mkt={market}&q={query}"
-    )
+    search_url: str = "https://www.bing.com/search?setlang={lang}&q={query}"
+    news_search_url: str = "https://www.bing.com/news/search?format=rss&setlang={lang}&q={query}"
     search_fallback_urls: list[str] = field(
-        default_factory=lambda: [
-            "https://www.bing.com/search?setlang={lang}&cc={country}"
-            "&mkt={market}&q={query}",
-            "https://html.duckduckgo.com/html/?q={query}",
-        ]
+        default_factory=lambda: ["https://html.duckduckgo.com/html/?q={query}"]
     )
     user_agent: str = "qqbot-agent/1.0"
 
@@ -416,7 +409,7 @@ def _parse_action_queue_section(data: dict[str, Any]) -> ActionQueueConfig:
                 [
                     "send_group_msg",
                     "send_private_msg",
-                    "send_group_poke",
+                    "group_poke",
                     "send_group_forward_msg",
                     "set_group_ban",
                     "set_group_kick",

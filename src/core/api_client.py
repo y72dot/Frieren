@@ -272,7 +272,7 @@ class ApiClient:
     async def send_group_poke(self, group_id: int, user_id: int) -> dict[str, Any]:
         """Poke a user in a group."""
         return await self._dispatch_action(
-            "group_poke", group_id=group_id, user_id=user_id, target_id=user_id
+            "group_poke", group_id=group_id, user_id=user_id
         )
 
     # ------------------------------------------------------------------

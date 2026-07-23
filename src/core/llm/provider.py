@@ -131,8 +131,19 @@ class OpenAICompatibleProvider:
             logger.debug(f"LLM returned {len(parsed)} tool call(s): {[tc.name for tc in parsed]}")
             return LlmResponse(tool_calls=parsed)
 
-        # Plain text
+        # Plain text – fall back to reasoning_content when content is empty
+        # (DeepSeek V4 Flash may spend all tokens on reasoning)
         content: str = msg.get("content", "") or ""
+        if not content:
+            reasoning: str = msg.get("reasoning_content", "") or ""
+            if reasoning:
+                content = reasoning
+                logger.debug(
+                    f"LLM response: content empty, using reasoning_content "
+                    f"({len(reasoning)} chars)"
+                )
+            else:
+                logger.warning("LLM returned empty content and no reasoning_content")
         logger.debug(f"LLM response: {content[:100]}...")
         return LlmResponse(text=content)
 

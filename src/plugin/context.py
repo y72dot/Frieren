@@ -212,7 +212,7 @@ class PluginContext:
 
         msg = BusMessage(
             type=MessageType.INTERNAL,
-            payload={"topic": topic, "data": data or {}},
+            payload={**(data or {}), "topic": topic},
             source=self.plugin_id,
         )
         try:
@@ -231,7 +231,7 @@ class PluginContext:
 
         msg = BusMessage(
             type=MessageType.INTERNAL,
-            payload={"topic": topic, "data": data or {}},
+            payload={**(data or {}), "topic": topic},
             source=self.plugin_id,
         )
         await self._bus.emit_and_wait(msg, self._bot)

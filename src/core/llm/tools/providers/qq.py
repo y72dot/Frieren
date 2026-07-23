@@ -283,9 +283,10 @@ async def _exec_set_admin(args: dict, group_id: int | None, user_id: int | None,
 
 
 async def _exec_send_poke(args: dict, group_id: int | None, user_id: int | None, bot) -> dict:
-    params = {"user_id": args["user_id"], "target_id": args["user_id"]}
+    target_user = int(args["user_id"])
+    params: dict = {"user_id": target_user}
     if group_id is not None:
-        params["group_id"] = group_id
+        params["group_id"] = int(group_id)
     return await bot.api.call_action("group_poke", **params)
 
 
