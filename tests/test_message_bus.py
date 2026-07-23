@@ -16,6 +16,8 @@ from src.core.filter_manager import FilterManager
 from src.core.message_bus import BusMessage, MessageBus, MessageType
 from src.core.message_store import MessageStore
 from src.plugin.base import Event
+from src.plugin.bridge import _MiddlewarePipelineAdapter
+from src.plugin.middleware import MiddlewarePipeline
 
 # -------------------------------------------------------------------
 # minimal bot stub
@@ -235,6 +237,32 @@ async def test_dispatch_action_spam_filter_passes():
     result = await bus.dispatch(msg, bot)
     assert result == {"status": "ok", "action": "send_group_msg"}
     assert len(bot.api.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_dispatch_action_empty_terminal_result_is_still_consumed():
+    """An empty successful API result must not fall through to _qq_exec."""
+    bus = MessageBus()
+    terminal_calls = 0
+
+    async def empty_terminal(action, params):
+        nonlocal terminal_calls
+        terminal_calls += 1
+        return None
+
+    adapter = _MiddlewarePipelineAdapter(MiddlewarePipeline([], empty_terminal))
+    bus.subscribe(MessageType.ACTION, adapter, 0)
+    bot = _MinimalBot(bus)
+
+    msg = BusMessage(
+        type=MessageType.ACTION,
+        payload={"action": "group_poke", "group_id": 123, "user_id": 456},
+    )
+    result = await bus.dispatch(msg, bot)
+
+    assert result is None
+    assert terminal_calls == 1
+    assert bot.api.calls == []
 
 
 # -------------------------------------------------------------------

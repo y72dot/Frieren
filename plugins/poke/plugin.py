@@ -1,5 +1,7 @@
 """Poke package plugin – pokes back when poked in a group."""
 
+import time
+
 from loguru import logger
 
 from src.plugin import EventResult, on_event
@@ -16,6 +18,11 @@ class PokePlugin:
     __plugin_id__ = "poke"
     name = "poke_back"
     priority = 0
+    _DEDUP_WINDOW_SECONDS = 1.0
+
+    def __init__(self) -> None:
+        self._last_poke_signature: tuple[int, int, int, int] | None = None
+        self._last_poke_seen_at = 0.0
 
     @on_event("notice.notify", priority=0)
     async def poke_back(self, event, ctx) -> EventResult:
@@ -29,6 +36,31 @@ class PokePlugin:
         # If the bot is the target, poke back the poker instead of self-poking
         if target == ctx.config.bot_id:
             target = event.user_id
+
+        signature = (
+            int(_get(event.raw, "time", 0)),
+            int(group_id),
+            int(event.user_id),
+            target,
+        )
+        now = time.monotonic()
+        if (
+            signature == self._last_poke_signature
+            and now - self._last_poke_seen_at < self._DEDUP_WINDOW_SECONDS
+        ):
+            logger.debug(
+                f"poke: duplicate notice ignored poker={event.user_id} "
+                f"target={target} grp={group_id}"
+            )
+            return EventResult.CONSUME
+
+        self._last_poke_signature = signature
+        self._last_poke_seen_at = now
         logger.info(f"poke: poker={event.user_id} target={target} grp={group_id}")
-        await ctx.api.send_group_poke(group_id, target)
+        try:
+            await ctx.api.send_group_poke(group_id, target)
+        except Exception:
+            # Let a duplicate delivery retry if the original API call failed.
+            self._last_poke_signature = None
+            raise
         return EventResult.CONSUME

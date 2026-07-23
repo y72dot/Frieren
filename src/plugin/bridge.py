@@ -188,6 +188,10 @@ class _MiddlewarePipelineAdapter:
     result (truthy), the MessageBus dispatch loop stops.
     """
 
+    # The pipeline includes the terminal QQ executor. Once it matches, the
+    # ACTION has been handled even when NapCat returns an empty data payload.
+    consumes_on_match = True
+
     def __init__(self, pipeline: MiddlewarePipeline, name: str = "action_pipeline") -> None:
         self._pipeline = pipeline
         self.name = name

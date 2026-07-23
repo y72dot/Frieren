@@ -330,7 +330,10 @@ class MessageBus:
 
                 logger.debug(f"'{sub.handler.name}'.handle() -> {bool(result)} ({elapsed:.0f}ms)")
 
-                if suppressible and result:
+                consumes_on_match = bool(
+                    getattr(sub.handler, "consumes_on_match", False)
+                )
+                if suppressible and (result or consumes_on_match):
                     logger.debug(f"Message suppressed by '{sub.handler.name}'")
                     return result
 
