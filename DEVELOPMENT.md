@@ -63,7 +63,7 @@
 截至 2026-07-23：
 
 - Agent 能力平台 Phase 1–8 的自动化实现已经完成；
-- 生产切换仍缺少真实 QQ L6 和目标服务器故障恢复演练；
+- 真实 QQ L6 已于 2026-07-23 在专用测试群通过；生产切换仅剩目标服务器故障恢复演练；
 - LLM Tool Provider 已从 `plugins/` 迁出，工具只经 Tool Platform 执行；
 - 插件系统重构 P0–P4 已交付：
   - P0：MessageBus SubscriptionScope、reload 残留修复；

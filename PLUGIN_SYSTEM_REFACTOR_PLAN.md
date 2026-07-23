@@ -4,6 +4,7 @@
 > 编制日期：2026-07-22  
 > 适用范围：`src/plugin/`、`src/core/message_bus.py`、插件装载相关 Bot 生命周期、`plugins/`、Control Plane 插件部署链路及相关测试  
 > 当前阶段：P0+P1+P2+P3+P4+P5+P6 全部完成
+> 发布门禁：真实 QQ L6 已于 2026-07-23 通过；目标服务器故障恢复演练待完成
 > 任务真源：本文第 20 节  
 > 原则：渐进迁移、行为兼容、阶段可回滚、不引入 NoneBot/AstrBot/Koishi
 
