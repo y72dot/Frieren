@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import pytest
@@ -100,7 +101,7 @@ class TestPackageLoader:
         assert len(candidates) == 0
 
     def test_entrypoint_path_escape_rejected(self, tmp_path):
-        plugin_dir = _create_package_plugin(
+        _create_package_plugin(
             tmp_path,
             "escape_test",
             """\
@@ -204,5 +205,5 @@ class TestDiscoverCandidates:
         _create_package_plugin(tmp_path, "frozen_test", _make_minimal_manifest("frozen_test"))
         candidates = discover_candidates([str(tmp_path)])
         c = candidates[0]
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             c.plugin_id = "changed"  # type: ignore[misc]

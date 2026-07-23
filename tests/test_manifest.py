@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import pytest
@@ -151,7 +152,7 @@ class TestManifestParsing:
             """,
         )
         m = parse_manifest(path)
-        with pytest.raises(Exception):  # FrozenInstanceError or similar
+        with pytest.raises(dataclasses.FrozenInstanceError):
             m.id = "other"  # type: ignore[misc]
 
     def test_semver_with_prerelease(self, tmp_path):

@@ -73,7 +73,7 @@ def _setup_action_queue_bot(bot, **aq_kwargs):
 class TestToolErrors:
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_api_failure_in_tool(self, e2e_bot):
+    async def test_api_failure_in_tool(self, e2e_bot):  # noqa: F811
         """API failure in a tool returns error dict, doesn't crash."""
         # Make set_group_ban raise
         async def failing_ban(*args, **kwargs):
@@ -91,7 +91,7 @@ class TestToolErrors:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_llm_provider_raises(self, e2e_llm_bot):
+    async def test_llm_provider_raises(self, e2e_llm_bot):  # noqa: F811
         """LLM provider raising an exception is caught and logged."""
         async def failing_chat(*args, **kwargs):
             raise RuntimeError("LLM API down")
@@ -116,7 +116,7 @@ class TestToolErrors:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_malformed_raw_event(self, e2e_bot):
+    async def test_malformed_raw_event(self, e2e_bot):  # noqa: F811
         """Unknown post_type → EventBus.parse returns None → event discarded."""
         raw = {
             "post_type": "unknown_type",
@@ -127,7 +127,7 @@ class TestToolErrors:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_tool_missing_required_arg(self, e2e_bot):
+    async def test_tool_missing_required_arg(self, e2e_bot):  # noqa: F811
         """mute_user without user_id raises KeyError → captured as error result."""
         results = await _run_tool(
             e2e_bot,
@@ -139,7 +139,7 @@ class TestToolErrors:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_private_send_like_no_group_id(self, e2e_bot):
+    async def test_private_send_like_no_group_id(self, e2e_bot):  # noqa: F811
         """send_like in private context works without group_id."""
         results = await _run_tool(
             e2e_bot,
@@ -151,7 +151,7 @@ class TestToolErrors:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_whole_ban_default_enable(self, e2e_bot):
+    async def test_whole_ban_default_enable(self, e2e_bot):  # noqa: F811
         """whole_ban without enable arg defaults to True."""
         results = await _run_tool(
             e2e_bot, [ToolCall(id="c1", name="whole_ban", arguments={})]
@@ -170,7 +170,7 @@ class TestToolErrors:
 class TestActionQueueErrors:
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_action_queue_block_list(self, e2e_bot):
+    async def test_action_queue_block_list(self, e2e_bot):  # noqa: F811
         """Blocked action (set_group_kick) is consumed and not executed."""
         _setup_action_queue_bot(e2e_bot, block_actions=["set_group_kick"])
 
@@ -189,7 +189,7 @@ class TestActionQueueErrors:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_action_queue_spam_dedup(self, e2e_bot):
+    async def test_action_queue_spam_dedup(self, e2e_bot):  # noqa: F811
         """Same send_group_msg within spam_window → second is deduplicated."""
         _setup_action_queue_bot(
             e2e_bot,
@@ -213,7 +213,7 @@ class TestActionQueueErrors:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_action_queue_rate_limit(self, e2e_bot):
+    async def test_action_queue_rate_limit(self, e2e_bot):  # noqa: F811
         """Low global_rate causes delays between actions."""
         _setup_action_queue_bot(
             e2e_bot,
@@ -243,7 +243,7 @@ class TestActionQueueErrors:
 class TestFilterErrors:
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_filter_blocks_entire_event(self, e2e_bot):
+    async def test_filter_blocks_entire_event(self, e2e_bot):  # noqa: F811
         """Blacklisted group → event blocked → no plugin executed."""
 
         e2e_bot.filter_mgr.update_config(
@@ -290,7 +290,7 @@ class TestFilterErrors:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_missing_message_id_not_recorded(self, e2e_bot):
+    async def test_missing_message_id_not_recorded(self, e2e_bot):  # noqa: F811
         """Event with message_id=None is not persisted to msg_store."""
         raw = {
             "post_type": "message",

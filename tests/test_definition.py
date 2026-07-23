@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from src.plugin.definition import (
@@ -34,7 +36,7 @@ class TestHandlerSpecs:
         assert spec.name == "test"
         assert spec.aliases == ("t",)
         assert spec.priority == 5
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             spec.name = "other"  # type: ignore[misc]
 
     def test_event_handler_spec_immutable(self):
@@ -42,14 +44,14 @@ class TestHandlerSpecs:
         spec = EventHandlerSpec(event_type="message.group", priority=10, handler=h)
         assert spec.event_type == "message.group"
         assert spec.priority == 10
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             spec.event_type = "changed"  # type: ignore[misc]
 
     def test_observer_spec_immutable(self):
         async def h(): pass
         spec = ObserverSpec(event_type="notice.notify", handler=h)
         assert spec.event_type == "notice.notify"
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             spec.event_type = "other"  # type: ignore[misc]
 
     def test_internal_handler_spec_immutable(self):
@@ -57,14 +59,14 @@ class TestHandlerSpecs:
         spec = InternalHandlerSpec(message_type="internal", topic="metrics", handler=h)
         assert spec.message_type == "internal"
         assert spec.topic == "metrics"
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             spec.topic = "changed"  # type: ignore[misc]
 
     def test_lifecycle_hook_spec_immutable(self):
         async def h(): pass
         spec = LifecycleHookSpec(hook_type="start", handler=h)
         assert spec.hook_type == "start"
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             spec.hook_type = "stop"  # type: ignore[misc]
 
     def test_handlers_excluded_from_equality(self):
@@ -99,7 +101,7 @@ class TestPluginDefinition:
 
     def test_definition_immutable(self):
         d = PluginDefinition(plugin_id="test", version="1.0.0")
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             d.plugin_id = "other"  # type: ignore[misc]
 
     def test_definition_with_commands(self):

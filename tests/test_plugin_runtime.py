@@ -70,7 +70,7 @@ class TestActivate:
 
     @pytest.mark.asyncio
     async def test_respects_disabled(self, runtime):
-        count = await runtime.activate(
+        _count = await runtime.activate(
             ["tests/test_plugins"],
             disabled=["ping", "repeater", "admin", "llm", "tool_agent", "search"],
         )
@@ -111,6 +111,56 @@ class TestReload:
         assert gen2 > gen1
         await runtime.reload(["tests/test_plugins"])
         assert runtime.generation > gen2
+
+    @pytest.mark.asyncio
+    async def test_targeted_reload_restores_old_snapshot_on_activation_failure(
+        self, runtime, monkeypatch
+    ):
+        from types import SimpleNamespace
+
+        from src.plugin.definition import PluginDefinition
+        from src.plugin.manifest import PluginManifest
+
+        old = LoadedPlugin(
+            manifest=PluginManifest(
+                id="demo",
+                version="1.0.0",
+                entrypoint="demo.plugin:Demo",
+                sdk="*",
+            ),
+            definition=PluginDefinition(plugin_id="demo", version="1.0.0"),
+        )
+        old.state = PluginState.ACTIVE
+        runtime._plugins["demo"] = old
+        old_snapshot = build_snapshot(runtime._plugins, 1)
+        runtime.registry.publish(old_snapshot)
+
+        monkeypatch.setattr(
+            "src.plugin.runtime.discover_candidates",
+            lambda _dirs: [SimpleNamespace(plugin_id="demo")],
+        )
+
+        async def fail_activation(_candidate, gen):
+            failed = LoadedPlugin(
+                manifest=PluginManifest(
+                    id="demo",
+                    version="2.0.0",
+                    entrypoint="demo.plugin:Demo",
+                    sdk="*",
+                ),
+                definition=PluginDefinition(plugin_id="demo", version="2.0.0"),
+                generation=gen,
+            )
+            failed.state = PluginState.FAILED
+            runtime._plugins["demo"] = failed
+
+        monkeypatch.setattr(runtime, "_activate_one", fail_activation)
+
+        active = await runtime.reload_plugin("demo", ["missing"])
+
+        assert active is False
+        assert runtime.get_plugin("demo") is old
+        assert runtime.snapshot is old_snapshot
 
 
 # ---------------------------------------------------------------------------

@@ -40,7 +40,7 @@ def _raw_at_msg(user_id=111, text="Hello", group_id=456, msg_id=1) -> dict:
 class TestMultiTurnScenarios:
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_query_action_chain(self, e2e_llm_bot):
+    async def test_query_action_chain(self, e2e_llm_bot):  # noqa: F811
         """query_history → mute_user → final reply chain."""
         # Seed message store for query_history
         now = int(time.time())
@@ -90,7 +90,7 @@ class TestMultiTurnScenarios:
 
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_max_turns_exceeded(self, e2e_llm_bot):
+    async def test_max_turns_exceeded(self, e2e_llm_bot):  # noqa: F811
         """max_turns=3, continuous tool calls → forced final text reply."""
         # Configure max_turns=3
         e2e_llm_bot.config.llm.max_turns = 3
@@ -117,7 +117,7 @@ class TestMultiTurnScenarios:
 
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_max_turns_blocks_dsml_forced_final(self, e2e_llm_bot):
+    async def test_max_turns_blocks_dsml_forced_final(self, e2e_llm_bot):  # noqa: F811
         e2e_llm_bot.config.llm.max_turns = 1
         _make_provider(
             e2e_llm_bot,
@@ -148,7 +148,7 @@ class TestMultiTurnScenarios:
     @pytest.mark.llm
     @pytest.mark.asyncio
     async def test_session_summary_uses_agent_tool_count(
-        self, e2e_llm_bot, monkeypatch
+        self, e2e_llm_bot, monkeypatch  # noqa: F811
     ):
         import plugins.llm_core as llm_core
 
@@ -188,7 +188,7 @@ class TestMultiTurnScenarios:
 
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_session_ttl_expiry(self, e2e_llm_bot):
+    async def test_session_ttl_expiry(self, e2e_llm_bot):  # noqa: F811
         """Pre-set expired session → new trigger creates NEW session."""
         from src.core.llm.session_manager import Session
 
@@ -224,7 +224,7 @@ class TestMultiTurnScenarios:
 
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_session_across_messages(self, e2e_llm_bot):
+    async def test_session_across_messages(self, e2e_llm_bot):  # noqa: F811
         """Two consecutive messages append to the same session."""
         _make_provider(
             e2e_llm_bot,
@@ -251,7 +251,7 @@ class TestMultiTurnScenarios:
 
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_member_list_then_query(self, e2e_llm_bot):
+    async def test_member_list_then_query(self, e2e_llm_bot):  # noqa: F811
         """get_member_list → extract user → query_history(user_id) chain."""
         # Set up member list response
         e2e_llm_bot.api.set_response(
@@ -292,7 +292,7 @@ class TestMultiTurnScenarios:
 
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_tool_error_propagation(self, e2e_llm_bot):
+    async def test_tool_error_propagation(self, e2e_llm_bot):  # noqa: F811
         """A tool that fails returns error → conversation continues."""
         _make_provider(
             e2e_llm_bot,

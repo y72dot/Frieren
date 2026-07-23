@@ -60,7 +60,7 @@
 
 ## 5. 当前基线
 
-截至 2026-07-22：
+截至 2026-07-23：
 
 - Agent 能力平台 Phase 1–8 的自动化实现已经完成；
 - 生产切换仍缺少真实 QQ L6 和目标服务器故障恢复演练；
@@ -73,6 +73,6 @@
   - P4：EventResult (CONSUME/CONTINUE) 语义、EventRegistry/ObserverRegistry 类型化分发、CommandRegistry 命令索引与别名解析、ActionMiddleware 洋葱管线 + MiddlewarePipeline、ACTION 中间件适配器（p=0）、action_queue 迁移为 ActionQueueMiddleware 类；
 - 剩余阶段 P5–P6 已完成：
   - P5：类型化插件配置、PluginStorage 与迁移、Scheduler/Task 插件归属、CLI/模板/模拟器/doctor、sticker_react/repeater/history/essence 迁移完成；
-  - P6：PLUG-603 + PLUG-604 完成——7 个剩余插件迁移到包格式、删除旧代码（legacy.py/decorators.py/LegacyLoader 等）、1015 tests pass、ruff clean。PLUG-601/602（Control Plane 部署）推迟至后续阶段。
+  - P6：PLUG-601/602 完成——Control Plane 复用正式 Manifest、安全校验、摘要复核与两阶段原子部署；Coordinator 定向热重载并核验目标版本/快照，失败时恢复文件、持久化禁用配置和旧 Runtime 快照；PLUG-603/604 完成——7 个剩余插件迁移到包格式、删除 legacy.py/decorators.py/LegacyLoader 等；全量 1064 tests pass、ruff clean、Docker L0–L5 全绿。
 
 下一项架构工作以 `PLUGIN_SYSTEM_REFACTOR_PLAN.md` 为准。

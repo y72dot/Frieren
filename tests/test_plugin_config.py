@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 
 import pytest
@@ -107,7 +108,7 @@ class TestBuildPluginConfig:
         """Frozen dataclass raises FrozenInstanceError on mutation."""
         schema = PluginConfigSchema(cls=HelloConfig, module_name="m", class_name="C")
         result = build_plugin_config(schema, {"greeting": "Hi"})
-        with pytest.raises(Exception):  # FrozenInstanceError or similar
+        with pytest.raises(dataclasses.FrozenInstanceError):
             result.greeting = "bye"
 
     def test_partial_override_uses_defaults(self):

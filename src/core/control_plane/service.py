@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import ast
-import hashlib
 import json
 import os
 import re
@@ -9,18 +7,19 @@ import shutil
 import sqlite3
 import tempfile
 import time
-import tomllib
 import uuid
 from copy import deepcopy
 from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
+from src.core.control_plane._deployer import PackageDeployer
+from src.core.control_plane._security import SecurityReport, SecurityValidator
 from src.core.prompts import PromptRegistry
 
 _SENSITIVE_PARTS = {"api_key", "token", "password", "secret", "env", "admin_users"}
-_FORBIDDEN_PLUGIN_IMPORTS = {"docker", "napcat", "subprocess", "ctypes"}
-_FORBIDDEN_PLUGIN_TEXT = {".env", "docker.sock", "QQNT", "NapCatQQ"}
 
 
 @dataclass(frozen=True)
@@ -68,9 +67,11 @@ class ControlPlane:
         prompts_dir: str | Path = "config/prompts",
         candidate_dir: str | Path = "plugins/candidates",
         plugin_dir: str | Path = "plugins",
+        coordinator: Any = None,
     ) -> None:
         self.bot = bot
         self.connection = connection
+        self._coordinator = coordinator
         self.prompts_dir = Path(prompts_dir).resolve()
         self.candidate_dir = Path(candidate_dir).resolve()
         self.plugin_dir = Path(plugin_dir).resolve()
@@ -105,7 +106,70 @@ class ControlPlane:
             "CREATE INDEX IF NOT EXISTS idx_control_proposals_status "
             "ON control_proposals(status, created_at)"
         )
+        self._migrate_schema_v2()
+        self._security = SecurityValidator(self.plugin_dir)
+        self._deployer = PackageDeployer(
+            self.plugin_dir, self.candidate_dir, self.connection
+        )
+
+    # ------------------------------------------------------------------
+    # schema migration
+    # ------------------------------------------------------------------
+
+    def _migrate_schema_v2(self) -> None:
+        """Idempotent migration adding package deployment columns."""
+        existing = {
+            row[1]
+            for row in self.connection.execute(
+                "PRAGMA table_info(plugin_deployments)"
+            ).fetchall()
+        }
+        new_columns = {
+            "deployment_phase": "TEXT NOT NULL DEFAULT 'active'",
+            "package_digest": "TEXT NOT NULL DEFAULT ''",
+            "manifest_snapshot": "TEXT",
+            "permissions_snapshot": "TEXT",
+            "previous_deployment_id": "TEXT",
+            "runtime_generation": "INTEGER NOT NULL DEFAULT 0",
+            "activated_at": "INTEGER NOT NULL DEFAULT 0",
+            "error_message": "TEXT",
+            "validation_summary": "TEXT",
+        }
+        for col_name, col_def in new_columns.items():
+            if col_name not in existing:
+                self.connection.execute(
+                    f"ALTER TABLE plugin_deployments ADD COLUMN {col_name} {col_def}"
+                )
+
+        # Backfill existing rows
+        self.connection.execute(
+            "UPDATE plugin_deployments SET deployment_phase='active' "
+            "WHERE deployment_phase IS NULL OR deployment_phase=''"
+        )
+        self.connection.execute(
+            "UPDATE plugin_deployments SET status='legacy' "
+            "WHERE status='active' "
+            "AND (package_digest IS NULL OR package_digest='')"
+        )
+
+        # Indexes
+        self.connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_plugin_deployments_name_status "
+            "ON plugin_deployments(name, status)"
+        )
+        self.connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_plugin_deployments_prev "
+            "ON plugin_deployments(previous_deployment_id)"
+        )
         self.connection.commit()
+
+    def recover_deployments(self) -> list[str]:
+        """Recover incomplete deployments on boot."""
+        return self._deployer.recover_on_boot()
+
+    # ------------------------------------------------------------------
+    # settings & prompts (unchanged)
+    # ------------------------------------------------------------------
 
     def get_setting(self, path: str) -> Any:
         _reject_sensitive_path(path)
@@ -169,6 +233,10 @@ class ControlPlane:
             created_by,
         )
 
+    # ------------------------------------------------------------------
+    # plugin list
+    # ------------------------------------------------------------------
+
     def list_plugins(self) -> list[dict[str, Any]]:
         disabled = set(self.bot.config.plugin.disabled_plugins)
         return [
@@ -176,58 +244,27 @@ class ControlPlane:
             for plugin in self.bot.plugin_manager.plugins
         ]
 
+    # ------------------------------------------------------------------
+    # plugin validation (delegated to SecurityValidator)
+    # ------------------------------------------------------------------
+
     def validate_plugin_candidate(self, candidate: str) -> dict[str, Any]:
         root = self._candidate_path(candidate)
-        manifest_path = root / "plugin.toml"
-        if not manifest_path.is_file():
-            raise FileNotFoundError(f"plugin manifest not found: {candidate}/plugin.toml")
-        with manifest_path.open("rb") as handle:
-            manifest = tomllib.load(handle)
-        name = str(manifest.get("name", "")).strip()
-        version = str(manifest.get("version", "")).strip()
-        entrypoint = str(manifest.get("entrypoint", "")).strip()
-        if not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", name):
-            raise ValueError("plugin name must be lowercase snake_case")
-        if not version or not entrypoint:
-            raise ValueError("plugin manifest requires version and entrypoint")
-        entry_path = (root / entrypoint).resolve()
-        if root not in entry_path.parents or not entry_path.is_file() or entry_path.suffix != ".py":
-            raise ValueError("plugin entrypoint must be a Python file inside candidate")
-        violations: list[str] = []
-        for source_path in root.rglob("*.py"):
-            source = source_path.read_text(encoding="utf-8")
-            try:
-                tree = ast.parse(source, filename=str(source_path))
-            except SyntaxError as exc:
-                violations.append(f"{source_path.name}: syntax error: {exc.msg}")
-                continue
-            for node in ast.walk(tree):
-                names: list[str] = []
-                if isinstance(node, ast.Import):
-                    names = [item.name.split(".", 1)[0] for item in node.names]
-                elif isinstance(node, ast.ImportFrom) and node.module:
-                    names = [node.module.split(".", 1)[0]]
-                for imported in names:
-                    if imported in _FORBIDDEN_PLUGIN_IMPORTS:
-                        violations.append(f"{source_path.name}: forbidden import {imported}")
-            for marker in _FORBIDDEN_PLUGIN_TEXT:
-                if marker.lower() in source.lower():
-                    violations.append(f"{source_path.name}: forbidden resource marker {marker}")
-        permissions = manifest.get("permissions", {})
-        digest = hashlib.sha256()
-        for source_path in sorted(root.rglob("*")):
-            if source_path.is_file():
-                digest.update(source_path.relative_to(root).as_posix().encode())
-                digest.update(source_path.read_bytes())
+        report = self._security.validate(root)
         return {
-            "valid": not violations,
-            "name": name,
-            "version": version,
-            "entrypoint": entrypoint,
-            "permissions": permissions,
-            "violations": violations,
+            "valid": report.valid,
+            "name": report.name,
+            "version": report.version,
+            "entrypoint": report.entrypoint,
+            "permissions": report.permissions,
+            "violations": report.violations,
             "candidate": candidate,
-            "sha256": digest.hexdigest(),
+            "sha256": report.sha256,
+            "manifest_snapshot": report.manifest_snapshot,
+            "file_count": report.file_count,
+            "total_size_bytes": report.total_size_bytes,
+            "symlinks_detected": report.symlinks_detected,
+            "warnings": report.warnings,
         }
 
     def propose_plugin_install(self, candidate: str, *, created_by: int | None) -> ChangeProposal:
@@ -262,18 +299,54 @@ class ControlPlane:
             created_by,
         )
 
-    def approve_and_apply(self, proposal_id: str, *, approved_by: int) -> ChangeProposal:
+    # ------------------------------------------------------------------
+    # proposal lifecycle
+    # ------------------------------------------------------------------
+
+    async def approve_and_apply(self, proposal_id: str, *, approved_by: int) -> ChangeProposal:
         proposal = self.get(proposal_id)
         if proposal is None:
             raise KeyError(f"proposal not found: {proposal_id}")
         if proposal.status != "pending":
             raise ValueError(f"proposal is not pending: {proposal.status}")
+
+        disabled_before = list(self.bot.config.plugin.disabled_plugins)
+        runtime_before = self._runtime_plugin_state(proposal)
+        rollback_guard = (
+            self._create_rollback_guard(proposal)
+            if proposal.kind == "plugin.rollback"
+            else None
+        )
         try:
             self._apply(proposal)
+            if proposal.kind in ("plugin.install", "plugin.rollback", "plugin.state"):
+                if self._coordinator is None:
+                    raise RuntimeError("plugin deployment coordinator is unavailable")
+                op_request = self.create_operation_request(proposal_id)
+                report = await self._coordinator.execute(op_request)
+                if not report.success:
+                    raise RuntimeError(
+                        report.error
+                        or f"plugin operation failed: {proposal.kind}"
+                    )
         except Exception as exc:
-            self._decide(proposal_id, "failed", approved_by, str(exc))
+            compensation_error = await self._compensate_plugin_operation(
+                proposal,
+                disabled_before=disabled_before,
+                runtime_before=runtime_before,
+                rollback_guard=rollback_guard,
+            )
+            error = str(exc)
+            if compensation_error:
+                error = f"{error}; compensation failed: {compensation_error}"
+            self._decide(proposal_id, "failed", approved_by, error)
+            if compensation_error:
+                raise RuntimeError(error) from exc
             raise
+
+        self._discard_rollback_guard(rollback_guard)
         self._decide(proposal_id, "applied", approved_by, None)
+
         result = self.get(proposal_id)
         assert result is not None
         return result
@@ -296,6 +369,75 @@ class ControlPlane:
             params = (status,)
         sql += " ORDER BY created_at DESC, proposal_id"
         return [ChangeProposal(*row) for row in self.connection.execute(sql, params)]
+
+    # ------------------------------------------------------------------
+    # R2 bridge: create operation request for coordinator
+    # ------------------------------------------------------------------
+
+    def create_operation_request(self, proposal_id: str) -> Any:
+        """Build an OperationRequest from an approved proposal payload."""
+        proposal = self.get(proposal_id)
+        if proposal is None:
+            raise KeyError(f"proposal not found: {proposal_id}")
+        if proposal.status not in ("pending", "applied"):
+            raise ValueError(f"proposal cannot be applied: {proposal.status}")
+
+        from src.core.control_plane._coordinator import (
+            CoordinatorOp,
+            OperationRequest,
+        )
+
+        payload = proposal.payload()
+        if proposal.kind == "plugin.install":
+            validation = payload["validation"]
+            # Find the deployment record created by _apply_plugin_install
+            row = self.connection.execute(
+                "SELECT deployment_id FROM plugin_deployments "
+                "WHERE name=? AND status='pending_activation' "
+                "ORDER BY installed_at DESC LIMIT 1",
+                (validation["name"],),
+            ).fetchone()
+            deployment_id = row[0] if row else ""
+            return OperationRequest(
+                op=CoordinatorOp.INSTALL,
+                plugin_id=validation["name"],
+                deployment_id=deployment_id,
+                proposal_id=proposal_id,
+                version=validation["version"],
+                enabled=True,
+            )
+        if proposal.kind == "plugin.rollback":
+            name = payload["name"]
+            row = self.connection.execute(
+                "SELECT deployment_id, version FROM plugin_deployments "
+                "WHERE name=? AND status='pending_activation' "
+                "ORDER BY installed_at DESC LIMIT 1",
+                (name,),
+            ).fetchone()
+            deployment_id = row[0] if row else ""
+            return OperationRequest(
+                op=CoordinatorOp.ROLLBACK,
+                plugin_id=name,
+                deployment_id=deployment_id,
+                proposal_id=proposal_id,
+                version=row[1] if row else "",
+                enabled=True,
+            )
+        if proposal.kind == "plugin.state":
+            name = payload["name"]
+            return OperationRequest(
+                op=CoordinatorOp.ENABLE if payload["enabled"] else CoordinatorOp.DISABLE,
+                plugin_id=name,
+                deployment_id="",
+                proposal_id=proposal_id,
+                version="",
+                enabled=payload["enabled"],
+            )
+        raise ValueError(f"unsupported proposal kind for operation: {proposal.kind}")
+
+    # ------------------------------------------------------------------
+    # apply
+    # ------------------------------------------------------------------
 
     def _apply(self, proposal: ChangeProposal) -> None:
         payload = proposal.payload()
@@ -322,12 +464,18 @@ class ControlPlane:
             self._apply_plugin_install(payload)
             return
         if proposal.kind == "plugin.state":
-            disabled = set(self.bot.config.plugin.disabled_plugins)
+            config = deepcopy(self.bot.config)
+            disabled = set(config.plugin.disabled_plugins)
             if payload["enabled"]:
                 disabled.discard(payload["name"])
             else:
                 disabled.add(payload["name"])
-            self.bot.config.plugin.disabled_plugins = sorted(disabled)
+            config.plugin.disabled_plugins = sorted(disabled)
+            self.bot.config_center.replace_config(
+                config,
+                changes={"plugin.disabled_plugins": config.plugin.disabled_plugins},
+            )
+            self.bot.config = config
             return
         if proposal.kind == "plugin.rollback":
             self._apply_plugin_rollback(payload["name"])
@@ -374,63 +522,186 @@ class ControlPlane:
             raise
         self.bot.prompt_registry = registry
 
+    # ------------------------------------------------------------------
+    # plugin install / rollback (delegated to PackageDeployer)
+    # ------------------------------------------------------------------
+
     def _apply_plugin_install(self, payload: dict[str, Any]) -> None:
         validation = payload["validation"]
-        current_validation = self.validate_plugin_candidate(payload["candidate"])
-        if not current_validation["valid"] or current_validation["sha256"] != validation["sha256"]:
+        current = self.validate_plugin_candidate(payload["candidate"])
+        if not current["valid"] or current["sha256"] != validation["sha256"]:
             raise ValueError("plugin candidate changed after validation")
+
         root = self._candidate_path(payload["candidate"])
-        source = (root / validation["entrypoint"]).resolve()
-        target = self.plugin_dir / f"{validation['name']}.py"
-        backup = None
-        if target.exists():
-            backup_dir = self.plugin_dir / ".plugin_backups"
-            backup_dir.mkdir(exist_ok=True)
-            backup = backup_dir / f"{validation['name']}-{uuid.uuid4().hex}.py"
-            shutil.copy2(target, backup)
-        self._backups[validation["name"]] = backup
-        temp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
-        shutil.copy2(source, temp)
-        os.replace(temp, target)
-        self.connection.execute(
-            "UPDATE plugin_deployments SET status='superseded' "
-            "WHERE name=? AND status='active'",
-            (validation["name"],),
+        plugin_id = validation["name"]
+
+        # Build a lightweight SecurityReport-like object for the deployer
+        report = SecurityReport(
+            valid=current["valid"],
+            name=current["name"],
+            version=current["version"],
+            entrypoint=current["entrypoint"],
+            permissions=current["permissions"],
+            violations=current["violations"],
+            candidate=current["candidate"],
+            sha256=current["sha256"],
+            manifest_snapshot=current.get("manifest_snapshot"),
+            file_count=current.get("file_count", 0),
+            total_size_bytes=current.get("total_size_bytes", 0),
+            symlinks_detected=current.get("symlinks_detected", False),
+            warnings=current.get("warnings", []),
         )
-        self.connection.execute(
-            """INSERT INTO plugin_deployments (
-                   deployment_id, name, version, target_path, backup_path,
-                   installed_at, status
-               ) VALUES (?, ?, ?, ?, ?, ?, 'active')""",
-            (
-                uuid.uuid4().hex,
-                validation["name"],
-                validation["version"],
-                str(target),
-                str(backup) if backup else None,
-                int(time.time()),
-            ),
-        )
-        self.connection.commit()
+
+        # Stage candidate → deploy via state machine
+        self._deployer.stage(root, plugin_id)
+        self._deployer.deploy(plugin_id, report)
+        # deploy() commits internally; phase is FILES_SWITCHED, status=pending_activation
 
     def _apply_plugin_rollback(self, name: str) -> None:
-        row = self.connection.execute(
-            """SELECT deployment_id, target_path, backup_path FROM plugin_deployments
-               WHERE name=? AND status='active' ORDER BY installed_at DESC LIMIT 1""",
-            (name,),
+        self._deployer.rollback(name)
+        # rollback() handles status/phases internally:
+        # marks current as rolled_back, reactivates previous as pending_activation
+
+    def _runtime_plugin_state(self, proposal: ChangeProposal) -> dict[str, Any]:
+        plugin_id = self._proposal_plugin_id(proposal)
+        if not plugin_id or not hasattr(self.bot, "plugin_runtime"):
+            return {"plugin_id": plugin_id, "enabled": False, "version": ""}
+        plugin = self.bot.plugin_runtime.get_plugin(plugin_id)
+        enabled = plugin_id in self.bot.plugin_runtime.snapshot.plugin_ids
+        return {
+            "plugin_id": plugin_id,
+            "enabled": enabled,
+            "version": plugin.manifest.version if plugin is not None else "",
+        }
+
+    @staticmethod
+    def _proposal_plugin_id(proposal: ChangeProposal) -> str:
+        payload = proposal.payload()
+        if proposal.kind == "plugin.install":
+            return str(payload["validation"]["name"])
+        if proposal.kind in ("plugin.rollback", "plugin.state"):
+            return str(payload["name"])
+        return ""
+
+    def _create_rollback_guard(
+        self, proposal: ChangeProposal
+    ) -> dict[str, Any] | None:
+        plugin_id = self._proposal_plugin_id(proposal)
+        if not plugin_id:
+            return None
+        target = self.plugin_dir / plugin_id
+        guard = self.plugin_dir / ".staging" / f".rollback-{proposal.proposal_id}"
+        if guard.exists():
+            shutil.rmtree(guard)
+        if target.is_dir():
+            guard.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(target, guard)
+
+        rows = self.connection.execute(
+            "SELECT deployment_id, status, deployment_phase, backup_path, "
+            "error_message FROM plugin_deployments WHERE name=?",
+            (plugin_id,),
+        ).fetchall()
+        active = self.connection.execute(
+            "SELECT deployment_id, backup_path FROM plugin_deployments "
+            "WHERE name=? AND status IN ('active', 'pending_activation', 'pending') "
+            "ORDER BY installed_at DESC LIMIT 1",
+            (plugin_id,),
         ).fetchone()
-        if row is None:
-            raise FileNotFoundError(f"no active deployment for plugin: {name}")
-        target = Path(row[1])
-        if row[2]:
-            shutil.copy2(Path(row[2]), target)
-        else:
-            target.unlink(missing_ok=True)
-        self.connection.execute(
-            "UPDATE plugin_deployments SET status='rolled_back' WHERE deployment_id=?",
-            (row[0],),
+        return {
+            "plugin_id": plugin_id,
+            "target": target,
+            "guard": guard,
+            "target_existed": target.is_dir(),
+            "rows": rows,
+            "active_backup": active[1] if active else None,
+        }
+
+    def _restore_rollback_guard(self, guard: dict[str, Any]) -> None:
+        target = Path(guard["target"])
+        backup = Path(guard["guard"])
+        active_backup = (
+            Path(guard["active_backup"]) if guard.get("active_backup") else None
         )
+
+        if target.is_dir():
+            if active_backup is not None and not active_backup.exists():
+                active_backup.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(target, active_backup)
+            else:
+                shutil.rmtree(target)
+        if guard["target_existed"] and backup.is_dir():
+            os.replace(backup, target)
+
+        for deployment_id, status, phase, backup_path, error_message in guard["rows"]:
+            self.connection.execute(
+                "UPDATE plugin_deployments SET status=?, deployment_phase=?, "
+                "backup_path=?, error_message=? WHERE deployment_id=?",
+                (status, phase, backup_path, error_message, deployment_id),
+            )
         self.connection.commit()
+
+    @staticmethod
+    def _discard_rollback_guard(guard: dict[str, Any] | None) -> None:
+        if guard is None:
+            return
+        path = Path(guard["guard"])
+        if path.is_dir():
+            shutil.rmtree(path)
+
+    async def _compensate_plugin_operation(
+        self,
+        proposal: ChangeProposal,
+        *,
+        disabled_before: list[str],
+        runtime_before: dict[str, Any],
+        rollback_guard: dict[str, Any] | None,
+    ) -> str | None:
+        if not proposal.kind.startswith("plugin."):
+            return None
+
+        plugin_id = runtime_before["plugin_id"]
+        try:
+            if proposal.kind == "plugin.install":
+                row = self.connection.execute(
+                    "SELECT 1 FROM plugin_deployments "
+                    "WHERE name=? AND status='pending_activation' "
+                    "ORDER BY installed_at DESC LIMIT 1",
+                    (plugin_id,),
+                ).fetchone()
+                if row is not None:
+                    self._deployer.rollback(plugin_id)
+            elif proposal.kind == "plugin.state":
+                config = deepcopy(self.bot.config)
+                config.plugin.disabled_plugins = list(disabled_before)
+                self.bot.config_center.replace_config(
+                    config,
+                    changes={"plugin.disabled_plugins": list(disabled_before)},
+                )
+                self.bot.config = config
+            elif proposal.kind == "plugin.rollback" and rollback_guard is not None:
+                self._restore_rollback_guard(rollback_guard)
+
+            if self._coordinator is not None:
+                report = await self._coordinator.reconcile(
+                    plugin_id,
+                    expected_enabled=bool(runtime_before["enabled"]),
+                    expected_version=str(runtime_before["version"]),
+                )
+                if not report.success:
+                    return report.error or "runtime reconciliation failed"
+            return None
+        except Exception as exc:
+            logger.opt(exception=True).error(
+                f"Plugin operation compensation failed for '{plugin_id}'"
+            )
+            return str(exc)
+        finally:
+            self._discard_rollback_guard(rollback_guard)
+
+    # ------------------------------------------------------------------
+    # proposal helpers
+    # ------------------------------------------------------------------
 
     def _create(
         self,

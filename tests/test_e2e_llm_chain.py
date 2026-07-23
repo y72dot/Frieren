@@ -63,7 +63,7 @@ def _raw_private_msg(user_id=789, text="hello", msg_id=1) -> dict:
 class TestLLMChainBasic:
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_simple_text_reply(self, e2e_llm_bot):
+    async def test_simple_text_reply(self, e2e_llm_bot):  # noqa: F811
         """@bot → chat_completion returns text → llm_sender sends it."""
         _make_provider_responses(e2e_llm_bot, [LlmResponse(text="Hello Alice!")])
 
@@ -76,7 +76,7 @@ class TestLLMChainBasic:
 
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_tool_call_then_reply(self, e2e_llm_bot):
+    async def test_tool_call_then_reply(self, e2e_llm_bot):  # noqa: F811
         """@bot → first round tool call → second round text reply."""
         _make_provider_responses(
             e2e_llm_bot,
@@ -99,7 +99,7 @@ class TestLLMChainBasic:
 
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_multiple_tools_one_turn(self, e2e_llm_bot):
+    async def test_multiple_tools_one_turn(self, e2e_llm_bot):  # noqa: F811
         """One LLM turn returns multiple tool calls → all executed → final reply."""
         _make_provider_responses(
             e2e_llm_bot,
@@ -127,7 +127,7 @@ class TestLLMChainBasic:
 
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_tool_across_multiple_turns(self, e2e_llm_bot):
+    async def test_tool_across_multiple_turns(self, e2e_llm_bot):  # noqa: F811
         """T1 tool → T2 tool → T3 text (multi-turn tool chain)."""
         _make_provider_responses(
             e2e_llm_bot,
@@ -158,7 +158,7 @@ class TestLLMChainBasic:
 
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_empty_llm_response_skipped(self, e2e_llm_bot):
+    async def test_empty_llm_response_skipped(self, e2e_llm_bot):  # noqa: F811
         """LLM returns empty text → no message is sent."""
         _make_provider_responses(e2e_llm_bot, [LlmResponse(text="")])
 
@@ -177,9 +177,9 @@ class TestLLMChainBasic:
 class TestLLMChainRouting:
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_group_vs_private_routing(self, e2e_llm_bot):
+    async def test_group_vs_private_routing(self, e2e_llm_bot):  # noqa: F811
         """Group chat → send_group_msg; private chat → send_private_msg."""
-        provider = _make_provider_responses(
+        _make_provider_responses(
             e2e_llm_bot, [LlmResponse(text="Group reply"), LlmResponse(text="Private reply")]
         )
 
@@ -204,7 +204,7 @@ class TestLLMChainRouting:
 
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_llm_disabled_ignores(self, e2e_bot):
+    async def test_llm_disabled_ignores(self, e2e_bot):  # noqa: F811
         """When config.llm.enabled=False, gate returns False and LLM is not called."""
         from plugins.llm_gate import LlmGatePlugin
 
@@ -227,7 +227,7 @@ class TestLLMChainRouting:
 
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_self_message_ignored(self, e2e_llm_bot):
+    async def test_self_message_ignored(self, e2e_llm_bot):  # noqa: F811
         """Bot's own message is not processed by LLM gate."""
         provider = _make_provider_responses(
             e2e_llm_bot, [LlmResponse(text="Should not send")]
@@ -242,9 +242,9 @@ class TestLLMChainRouting:
 class TestLLMChainSession:
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_session_cache_reuse(self, e2e_llm_bot):
+    async def test_session_cache_reuse(self, e2e_llm_bot):  # noqa: F811
         """Same session_key in TTL → appends user message instead of creating new."""
-        provider = _make_provider_responses(
+        _make_provider_responses(
             e2e_llm_bot,
             [LlmResponse(text="Reply 1"), LlmResponse(text="Reply 2")],
         )
@@ -264,7 +264,7 @@ class TestLLMChainSession:
 
     @pytest.mark.llm
     @pytest.mark.asyncio
-    async def test_long_reply_chunking(self, e2e_llm_bot):
+    async def test_long_reply_chunking(self, e2e_llm_bot):  # noqa: F811
         """Reply >4000 chars → llm_sender splits into multiple chunks."""
         long_text = "A" * 5000
         _make_provider_responses(e2e_llm_bot, [LlmResponse(text=long_text)])

@@ -90,7 +90,7 @@ class _NoticePlugin:
 class TestPipelineBasic:
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_command_plugin_e2e(self, e2e_bot):
+    async def test_command_plugin_e2e(self, e2e_bot):  # noqa: F811
         """Raw dict → /ping plugin → send_group_msg API call."""
         e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _CmdPlugin(), 0)
 
@@ -111,7 +111,7 @@ class TestPipelineBasic:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_event_records_to_msg_store(self, e2e_bot):
+    async def test_event_records_to_msg_store(self, e2e_bot):  # noqa: F811
         """Dispatched event is persisted in msg_store."""
         raw = {
             "post_type": "message",
@@ -134,7 +134,7 @@ class TestPipelineBasic:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_plugin_consumption_suppression(self, e2e_bot):
+    async def test_plugin_consumption_suppression(self, e2e_bot):  # noqa: F811
         """First plugin that returns True consumes event; second never called."""
         second_called = False
 
@@ -167,7 +167,7 @@ class TestPipelineBasic:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_priority_ordering(self, e2e_bot):
+    async def test_priority_ordering(self, e2e_bot):  # noqa: F811
         """Lower priority value = higher priority = handles first."""
         order: list[str] = []
 
@@ -210,7 +210,7 @@ class TestPipelineBasic:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_notice_event_passthrough(self, e2e_bot):
+    async def test_notice_event_passthrough(self, e2e_bot):  # noqa: F811
         """Notice events are parsed, stored, and dispatched to notice plugins."""
         catcher = _NoticePlugin()
         e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, catcher, 0)
@@ -232,7 +232,7 @@ class TestPipelineBasic:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_private_message_routing(self, e2e_bot):
+    async def test_private_message_routing(self, e2e_bot):  # noqa: F811
         """Private messages route through send_private_msg."""
         e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _PrivateReplyPlugin(), 0)
 
@@ -252,7 +252,7 @@ class TestPipelineBasic:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_plugin_returns_false_chain(self, e2e_bot):
+    async def test_plugin_returns_false_chain(self, e2e_bot):  # noqa: F811
         """plugin match=True handle=False → next matching plugin gets the event."""
         second_called = False
 
@@ -285,7 +285,7 @@ class TestPipelineBasic:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_unconsumed_event(self, e2e_bot):
+    async def test_unconsumed_event(self, e2e_bot):  # noqa: F811
         """No plugin matches the event → dispatch completes without error."""
         raw = {
             "post_type": "message",
@@ -301,7 +301,7 @@ class TestPipelineBasic:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_depth_limit_10(self, e2e_bot):
+    async def test_depth_limit_10(self, e2e_bot):  # noqa: F811
         """Messages exceeding depth=10 are silently dropped."""
         # Build a chain of messages that would exceed depth 10
         msg = BusMessage(type=MessageType.INTERNAL, payload={"x": 1}, source="test")

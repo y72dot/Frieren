@@ -70,6 +70,7 @@ class Bot:
         self.web_client = None
         self.ensure_capability_services()
         self.control_plane = None
+        self._deploy_coordinator = None
         self.ensure_control_plane()
         self.history_gateway = QQHistoryGateway(self.api)
         self._configure_history()
@@ -166,6 +167,23 @@ class Bot:
                 disabled=cfg.plugin.disabled_plugins,
             )
             logger.info(f"{count} plugin(s) loaded")
+
+        # Recover incomplete file deployments on boot
+        if self.control_plane is not None:
+            recovered_files = self.control_plane.recover_deployments()
+            if recovered_files:
+                logger.info(
+                    f"Control plane recovered {len(recovered_files)} "
+                    f"incomplete file deployment(s)"
+                )
+
+        # Recover any deployments stuck mid-activation
+        if self._deploy_coordinator is not None:
+            recovered = await self._deploy_coordinator.recover_pending()
+            if recovered:
+                logger.info(
+                    f"Deployment coordinator recovered {len(recovered)} pending activation(s)"
+                )
 
         # Initialize LLM provider if enabled
         if cfg.llm.enabled:
@@ -468,10 +486,16 @@ class Bot:
                 if configured.is_absolute() or configured.parts[:1] == ("config",)
                 else Path("config") / configured
             )
+        from src.core.control_plane._coordinator import DeploymentCoordinator
+
+        self._deploy_coordinator = DeploymentCoordinator(
+            self, self.msg_store.connection
+        )
         self.control_plane = ControlPlane(
             self,
             self.msg_store.connection,
             prompts_dir=prompts_dir,
+            coordinator=self._deploy_coordinator,
         )
 
     def ensure_history_services(self) -> None:

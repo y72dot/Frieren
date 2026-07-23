@@ -54,7 +54,7 @@ def _assert_tool_result(results, call_id, expected_key=None):
 class TestLocalTools:
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_get_current_time(self, e2e_bot):
+    async def test_get_current_time(self, e2e_bot):  # noqa: F811
         """get_current_time returns datetime without API calls."""
         before = len(e2e_bot.api.calls)
         results = await _run_tool(
@@ -68,7 +68,7 @@ class TestLocalTools:
         assert after == before  # No API calls
 
     @pytest.mark.asyncio
-    async def test_unknown_tool_error(self, e2e_bot):
+    async def test_unknown_tool_error(self, e2e_bot):  # noqa: F811
         """Unknown tool name returns error message."""
         results = await _run_tool(
             e2e_bot,
@@ -86,7 +86,7 @@ class TestLocalTools:
 class TestManagementTools:
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_set_essence(self, e2e_bot):
+    async def test_set_essence(self, e2e_bot):  # noqa: F811
         """set_essence calls set_essence_msg API."""
         results = await _run_tool(
             e2e_bot,
@@ -100,7 +100,7 @@ class TestManagementTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_disable_essence(self, e2e_bot):
+    async def test_disable_essence(self, e2e_bot):  # noqa: F811
         """set_essence(enabled=False) calls delete_essence_msg API."""
         results = await _run_tool(
             e2e_bot,
@@ -114,7 +114,7 @@ class TestManagementTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_mute_user(self, e2e_bot):
+    async def test_mute_user(self, e2e_bot):  # noqa: F811
         """mute_user calls set_group_ban with group_id, user_id, duration."""
         results = await _run_tool(
             e2e_bot,
@@ -137,7 +137,7 @@ class TestManagementTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_kick_user(self, e2e_bot):
+    async def test_kick_user(self, e2e_bot):  # noqa: F811
         """kick_user calls set_group_kick."""
         results = await _run_tool(
             e2e_bot,
@@ -153,7 +153,7 @@ class TestManagementTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_set_group_card(self, e2e_bot):
+    async def test_set_group_card(self, e2e_bot):  # noqa: F811
         """set_group_card calls set_group_card action."""
         results = await _run_tool(
             e2e_bot,
@@ -175,7 +175,7 @@ class TestManagementTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_delete_msg(self, e2e_bot):
+    async def test_delete_msg(self, e2e_bot):  # noqa: F811
         """delete_msg calls delete_msg action."""
         results = await _run_tool(
             e2e_bot,
@@ -191,7 +191,7 @@ class TestManagementTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_whole_ban_enable(self, e2e_bot):
+    async def test_whole_ban_enable(self, e2e_bot):  # noqa: F811
         """whole_ban with enable=True calls set_group_whole_ban."""
         results = await _run_tool(
             e2e_bot,
@@ -207,7 +207,7 @@ class TestManagementTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_set_admin(self, e2e_bot):
+    async def test_set_admin(self, e2e_bot):  # noqa: F811
         """set_admin calls set_group_admin action."""
         results = await _run_tool(
             e2e_bot,
@@ -236,7 +236,7 @@ class TestManagementTools:
 class TestInteractionTools:
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_react_emoji(self, e2e_bot):
+    async def test_react_emoji(self, e2e_bot):  # noqa: F811
         """react_emoji calls set_msg_emoji_like."""
         results = await _run_tool(
             e2e_bot,
@@ -257,7 +257,7 @@ class TestInteractionTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_remove_react_emoji(self, e2e_bot):
+    async def test_remove_react_emoji(self, e2e_bot):  # noqa: F811
         results = await _run_tool(
             e2e_bot,
             [
@@ -281,7 +281,7 @@ class TestInteractionTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_send_message_group(self, e2e_bot):
+    async def test_send_message_group(self, e2e_bot):  # noqa: F811
         """send_message in group context calls send_group_msg."""
         results = await _run_tool(
             e2e_bot,
@@ -302,7 +302,7 @@ class TestInteractionTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_send_message_private(self, e2e_bot):
+    async def test_send_message_private(self, e2e_bot):  # noqa: F811
         """send_message in private context calls send_private_msg."""
         results = await _run_tool(
             e2e_bot,
@@ -318,7 +318,7 @@ class TestInteractionTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_send_poke(self, e2e_bot):
+    async def test_send_poke(self, e2e_bot):  # noqa: F811
         """send_poke calls NapCat's unified group_poke action."""
         results = await _run_tool(
             e2e_bot,
@@ -335,7 +335,7 @@ class TestInteractionTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_send_poke_private(self, e2e_bot):
+    async def test_send_poke_private(self, e2e_bot):  # noqa: F811
         results = await _run_tool(
             e2e_bot,
             [ToolCall(id="c1", name="send_poke", arguments={"user_id": 222})],
@@ -353,7 +353,7 @@ class TestInteractionTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_send_like(self, e2e_bot):
+    async def test_send_like(self, e2e_bot):  # noqa: F811
         """send_like calls send_like action."""
         results = await _run_tool(
             e2e_bot,
@@ -382,7 +382,7 @@ class TestInteractionTools:
 class TestQueryTools:
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_get_group_info(self, e2e_bot):
+    async def test_get_group_info(self, e2e_bot):  # noqa: F811
         """get_group_info calls get_group_info API and formats result."""
         results = await _run_tool(
             e2e_bot, [ToolCall(id="c1", name="get_group_info", arguments={})]
@@ -395,7 +395,7 @@ class TestQueryTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_get_member_info(self, e2e_bot):
+    async def test_get_member_info(self, e2e_bot):  # noqa: F811
         """get_member_info calls get_group_member_info."""
         results = await _run_tool(
             e2e_bot,
@@ -410,7 +410,7 @@ class TestQueryTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_get_member_list(self, e2e_bot):
+    async def test_get_member_list(self, e2e_bot):  # noqa: F811
         """get_member_list calls get_group_member_list and formats result."""
         e2e_bot.api.set_response(
             "get_group_member_list",
@@ -430,7 +430,7 @@ class TestQueryTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_get_essence_list(self, e2e_bot):
+    async def test_get_essence_list(self, e2e_bot):  # noqa: F811
         """get_essence_list returns formatted essence list."""
         e2e_bot.api.set_response(
             "call_action",
@@ -453,7 +453,7 @@ class TestQueryTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_get_shut_list(self, e2e_bot):
+    async def test_get_shut_list(self, e2e_bot):  # noqa: F811
         """get_shut_list returns formatted shut-up list."""
         e2e_bot.api.set_response(
             "call_action",
@@ -471,7 +471,7 @@ class TestQueryTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_query_history_default(self, e2e_bot):
+    async def test_query_history_default(self, e2e_bot):  # noqa: F811
         """query_history without args returns recent group messages."""
         # Seed msg_store
         e2e_bot.msg_store.record_bot_message(
@@ -487,7 +487,7 @@ class TestQueryTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_query_history_by_user(self, e2e_bot):
+    async def test_query_history_by_user(self, e2e_bot):  # noqa: F811
         """query_history(user_id) filters by user."""
         now = int(time.time())
         e2e_bot.msg_store.record_bot_message(
@@ -508,7 +508,7 @@ class TestQueryTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_query_history_by_keyword(self, e2e_bot):
+    async def test_query_history_by_keyword(self, e2e_bot):  # noqa: F811
         """query_history(keyword) searches message content."""
         now = int(time.time())
         e2e_bot.msg_store.record_bot_message(
@@ -531,7 +531,7 @@ class TestQueryTools:
 class TestPerceptionTools:
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_ocr_image(self, e2e_bot):
+    async def test_ocr_image(self, e2e_bot):  # noqa: F811
         """ocr_image calls ocr_image API."""
         results = await _run_tool(
             e2e_bot,
@@ -551,7 +551,7 @@ class TestPerceptionTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_voice_to_text(self, e2e_bot):
+    async def test_voice_to_text(self, e2e_bot):  # noqa: F811
         """voice_to_text calls fetch_ptt_text API."""
         results = await _run_tool(
             e2e_bot,
@@ -572,7 +572,7 @@ class TestPerceptionTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_resolve_forward(self, e2e_bot):
+    async def test_resolve_forward(self, e2e_bot):  # noqa: F811
         """resolve_forward calls get_forward_msg and parses result."""
         e2e_bot.api.set_response(
             "get_forward_msg",
@@ -603,7 +603,7 @@ class TestPerceptionTools:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_resolve_forward_nested(self, e2e_bot):
+    async def test_resolve_forward_nested(self, e2e_bot):  # noqa: F811
         """resolve_forward handles nested forwards."""
         e2e_bot.api.set_response(
             "get_forward_msg",
@@ -645,7 +645,7 @@ class TestPerceptionTools:
 class TestToolEdgeCases:
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_mute_user_missing_user_id(self, e2e_bot):
+    async def test_mute_user_missing_user_id(self, e2e_bot):  # noqa: F811
         """mute_user without user_id raises KeyError → captured as error."""
         results = await _run_tool(
             e2e_bot,
@@ -656,7 +656,7 @@ class TestToolEdgeCases:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_whole_ban_default_enable(self, e2e_bot):
+    async def test_whole_ban_default_enable(self, e2e_bot):  # noqa: F811
         """whole_ban without enable arg defaults to True."""
         results = await _run_tool(
             e2e_bot, [ToolCall(id="c1", name="whole_ban", arguments={})]
@@ -671,7 +671,7 @@ class TestToolEdgeCases:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_send_like_private_no_group_id(self, e2e_bot):
+    async def test_send_like_private_no_group_id(self, e2e_bot):  # noqa: F811
         """send_like in private context works fine without group_id."""
         results = await _run_tool(
             e2e_bot,

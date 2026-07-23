@@ -61,7 +61,7 @@ def _plugin_was_called_collector():
 class TestGlobalFilters:
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_global_blacklist_blocks(self, e2e_bot):
+    async def test_global_blacklist_blocks(self, e2e_bot):  # noqa: F811
         """Blacklisted group event is blocked before any plugin sees it."""
         _set_filter_config(
             e2e_bot,
@@ -85,7 +85,7 @@ class TestGlobalFilters:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_global_whitelist_allows_only(self, e2e_bot):
+    async def test_global_whitelist_allows_only(self, e2e_bot):  # noqa: F811
         """Non-whitelisted group is blocked; whitelisted group passes."""
         _set_filter_config(
             e2e_bot,
@@ -136,7 +136,7 @@ class TestGlobalFilters:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_admin_bypass_all_filters(self, e2e_bot):
+    async def test_admin_bypass_all_filters(self, e2e_bot):  # noqa: F811
         """Admin user bypasses all global filters."""
         _set_filter_config(
             e2e_bot,
@@ -160,7 +160,7 @@ class TestGlobalFilters:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_bot_self_bypass(self, e2e_bot):
+    async def test_bot_self_bypass(self, e2e_bot):  # noqa: F811
         """Bot's own user_id bypasses all filters."""
         _set_filter_config(
             e2e_bot,
@@ -184,7 +184,7 @@ class TestGlobalFilters:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_filter_disabled(self, e2e_bot):
+    async def test_filter_disabled(self, e2e_bot):  # noqa: F811
         """When filter.enable=False, all events pass through."""
         _set_filter_config(
             e2e_bot,
@@ -208,7 +208,7 @@ class TestGlobalFilters:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_notice_bypass_filters(self, e2e_bot):
+    async def test_notice_bypass_filters(self, e2e_bot):  # noqa: F811
         """Notice events are never filtered (only message events are)."""
         _set_filter_config(
             e2e_bot,
@@ -237,7 +237,7 @@ class TestGlobalFilters:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_private_filter_separate(self, e2e_bot):
+    async def test_private_filter_separate(self, e2e_bot):  # noqa: F811
         """Private messages use private filter config, not group config."""
         # Block a user via private blacklist, but allow all groups
         _set_filter_config(
@@ -289,7 +289,7 @@ class TestGlobalFilters:
 class TestPerPluginFilters:
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_per_plugin_filter(self, e2e_bot):
+    async def test_per_plugin_filter(self, e2e_bot):  # noqa: F811
         """Per-plugin blacklist skips only the targeted plugin."""
         _set_filter_config(
             e2e_bot,

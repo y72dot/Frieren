@@ -67,7 +67,7 @@ class TestTaskSupervisor:
                 # cooperative cleanup
                 raise
 
-        task = ts.create_task("coop", _cooperative())
+        ts.create_task("coop", _cooperative())
         # Give the task a moment to start.
         await asyncio.sleep(0.01)
         uncancelled = await ts.shutdown()

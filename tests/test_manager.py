@@ -78,7 +78,7 @@ class _NonConsumingPlugin:
 
 def test_bus_subscribe_register_and_sort():
     bus = MessageBus()
-    pm = PluginManager(bus=bus)
+    PluginManager(bus=bus)
     # Register plugins via the bus directly.
     bus.subscribe(MessageType.EXTERNAL, _EchoPlugin(), 10)
     bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 0)

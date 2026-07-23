@@ -44,13 +44,13 @@ def _reset_all_module_state() -> None:
 
     # action_queue reset is a no-op since P6 (middleware is instance-based).
     # Kept for minimal diff – the import is now a harmless no-op passthrough.
-    from plugins.action_queue import reset_state as reset_aq  # noqa: F841
+    from plugins.action_queue import reset_state as _reset_aq  # noqa: F401
 
     lc._session_cache.clear()
     # Reassign (don't .clear()) because _tools_registry may share the
     # core QQ provider's backward-compatible TOOL_DEFS list.
     lc._tools_registry = []
-    reset_aq()
+    _reset_aq()
 
     # Character doc cache
     from src.core.llm.tools.providers import qq as lt
@@ -87,19 +87,19 @@ def _reset_all_module_state() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _register_llm_handlers(bot) -> None:
+def _register_llm_handlers(b) -> None:
     """Register the LLM trigger adapter and sender on the INTERNAL bus."""
     from plugins.llm_core import _lazy_init, llm_core_handler
     from plugins.llm_sender import llm_sender_handler
     from src.plugin.bridge import _SubscribeAdapter
 
-    _lazy_init(bot)
-    bot.message_bus.subscribe(
+    _lazy_init(b)
+    b.message_bus.subscribe(
         MessageType.INTERNAL,
         _SubscribeAdapter(llm_core_handler, "llm_core", 50),
         50,
     )
-    bot.message_bus.subscribe(
+    b.message_bus.subscribe(
         MessageType.INTERNAL,
         _SubscribeAdapter(llm_sender_handler, "llm_sender", 40),
         40,
@@ -112,7 +112,7 @@ def _register_llm_handlers(bot) -> None:
 
 
 @pytest.fixture
-def e2e_bot(bot_config):
+def e2e_bot(bot_config):  # noqa: F811
     """Full Bot instance with fake API, LLM provider, and in-memory store.
 
     LLM core/tools/sender handlers are registered on the INTERNAL bus.
@@ -154,20 +154,20 @@ def e2e_llm_bot(e2e_bot):
 # ---------------------------------------------------------------------------
 
 
-async def dispatch_raw_event(bot, raw_dict: dict) -> None:
+async def dispatch_raw_event(b, raw_dict: dict) -> None:
     """Inject a raw napcat dict event and flush all subsequent messages."""
-    await bot.event_bus.dispatch(raw_dict, bot)
-    await bot.message_bus.flush(bot)
+    await b.event_bus.dispatch(raw_dict, b)
+    await b.message_bus.flush(b)
 
 
-def assert_api_called(bot, method: str, **params: Any) -> None:
+def assert_api_called(b, method: str, **params: Any) -> None:
     """Assert that bot.api was called with the given method + optional params."""
     calls = [
         c
-        for c in bot.api.calls
+        for c in b.api.calls
         if c.get("method") == method or c.get("action") == method
     ]
-    assert calls, f"Expected API call '{method}' not found in {bot.api.calls}"
+    assert calls, f"Expected API call '{method}' not found in {b.api.calls}"
     if params:
         assert any(
             all(c.get(k) == v for k, v in params.items()) for c in calls

@@ -1,6 +1,7 @@
 """Tests for PluginContext, QQAgency, PluginConfigView, PermissionDeniedError."""
 
 import asyncio
+import dataclasses
 
 import pytest
 
@@ -89,7 +90,7 @@ class TestPluginConfigView:
 
     def test_is_frozen(self):
         view = PluginConfigView(bot_id=100, nickname="Bot", admin_users=())
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             view.bot_id = 200  # type: ignore[misc]
 
     def test_defaults(self):

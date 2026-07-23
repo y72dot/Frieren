@@ -640,6 +640,90 @@ class PluginRuntime:
         return terminal
 
     # ------------------------------------------------------------------
+    # per-plugin reload
+    # ------------------------------------------------------------------
+
+    async def reload_plugin(
+        self,
+        plugin_id: str,
+        plugin_dirs: list[str],
+        disabled: list[str] | None = None,
+    ) -> bool:
+        """Targeted hot-reload of a single plugin by id.
+
+        1. Discover the candidate from *plugin_dirs*.
+        2. If not found or disabled: stop old instance, remove from snapshot.
+        3. Increment generation, clear only that plugin's module cache.
+        4. Shadow-load the new version via ``_activate_one``.
+        5. Build new snapshot, publish atomically, drain old generation.
+        6. On failure, restore the old instance.
+
+        Returns ``True`` if the plugin ended up ACTIVE.
+        """
+        if disabled is None:
+            disabled = []
+
+        # 1. Find candidate for this specific plugin_id.
+        all_candidates = discover_candidates(plugin_dirs)
+        candidate = next(
+            (c for c in all_candidates if c.plugin_id == plugin_id), None
+        )
+
+        old = self._plugins.get(plugin_id)
+        old_snapshot = self.registry.current
+
+        # 2. Not found or disabled — stop and remove.
+        if candidate is None or plugin_id in disabled:
+            self._generation += 1
+            if old is not None:
+                del self._plugins[plugin_id]
+                snapshot = build_snapshot(self._plugins, self._generation)
+                self.registry.publish(snapshot)
+                await self._stop_plugin(old)
+            return False
+
+        # 3. Increment generation, clear per-plugin module cache.
+        self._generation += 1
+        gen = self._generation
+        self._clear_single_plugin_module_cache(plugin_id, plugin_dirs)
+
+        # 4. Activate the candidate (shadow-loads new version).
+        try:
+            await self._activate_one(candidate, gen)
+            new = self._plugins.get(plugin_id)
+            if new is None or new.state != PluginState.ACTIVE:
+                raise RuntimeError(
+                    f"plugin '{plugin_id}' did not reach ACTIVE state"
+                )
+        except Exception:
+            logger.opt(exception=True).error(
+                f"reload_plugin '{plugin_id}': activation failed, restoring old instance"
+            )
+            failed = self._plugins.get(plugin_id)
+            if failed is not None and failed is not old:
+                await self._stop_plugin(failed)
+            if old is not None:
+                self._plugins[plugin_id] = old
+            elif plugin_id in self._plugins:
+                del self._plugins[plugin_id]
+            self.registry.publish(old_snapshot)
+            return False
+
+        # 5. Build new snapshot (all active plugins including the reloaded one).
+        snapshot = build_snapshot(self._plugins, gen)
+        self.registry.publish(snapshot)
+
+        # 6. Drain the replaced object directly. Looking it up through
+        # self._plugins would stop the new instance instead.
+        if old is not None and old is not self._plugins.get(plugin_id):
+            await self._stop_plugin(old)
+            await asyncio.sleep(min(self._drain_timeout, 1.0))
+
+        # 7. Report success.
+        new = self._plugins.get(plugin_id)
+        return new is not None and new.state == PluginState.ACTIVE
+
+    # ------------------------------------------------------------------
     # helpers
     # ------------------------------------------------------------------
 
@@ -664,5 +748,32 @@ class PluginRuntime:
             if pycache.is_dir():
                 import shutil
 
+                shutil.rmtree(pycache)
+                logger.debug(f"Purged pycache: {pycache}")
+
+    def _clear_single_plugin_module_cache(
+        self, plugin_id: str, plugin_dirs: list[str]
+    ) -> None:
+        """Remove cached modules for a single plugin from ``sys.modules``."""
+        import shutil
+
+        for dir_name in plugin_dirs:
+            path = Path(dir_name).resolve()
+            if not path.is_dir():
+                continue
+            pkg_name = path.name
+            prefix = f"{pkg_name}.{plugin_id}"
+
+            to_remove = [
+                name
+                for name in sys.modules
+                if name == prefix or name.startswith(prefix + ".")
+            ]
+            for name in to_remove:
+                del sys.modules[name]
+                logger.debug(f"Evicted cached module: {name}")
+
+            pycache = path / plugin_id / "__pycache__"
+            if pycache.is_dir():
                 shutil.rmtree(pycache)
                 logger.debug(f"Purged pycache: {pycache}")
