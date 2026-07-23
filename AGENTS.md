@@ -9,15 +9,13 @@ tip：用 Bash 工具 + curl 来抓取网页内容，不用 WebFetch。llms.txt 
 ```
 NapCatQQ WebSocket → Bot._process_events (async for raw_event)
   → EventBus.parse (raw → Event) → bot.msg_store.record(event)
-    → FilterManager.check (全局+插件级过滤) → 不通过则丢弃
+    → FilterManager.check → 不通过则丢弃
     → MessageBus.dispatch (EXTERNAL, 按 priority 升序遍历插件)
-      → Plugin.match → Plugin.handle → return True/False (suppressible)
+      → Plugin.match → Plugin.handle → return True/False
   → 插件调用 bot.api.xxx() → MessageBus.dispatch (ACTION)
-    → action_queue (p=1): block → bypass → spam → rate-limit
-    → _QQExec (p=100) → ApiClient._raw_call → 实际 HTTP/WS 调用
+    → MiddlewarePipeline (p=0): ActionQueueMiddleware → _raw_call
+    → _QQExec (p=100) 最终执行
 ```
-
-No NoneBot / AstrBot / Koishi — core is self-written.
 
 ### Core Subsystems
 
@@ -27,9 +25,15 @@ No NoneBot / AstrBot / Koishi — core is self-written.
 | `FilterManager`    | 全局+插件级过滤，`bot.filter_mgr`，dispatch 前拦截    |
 | `EventBus`         | napcat 事件→内部`Event`；记录历史；触发 dispatch      |
 | `MessageStore`     | SQLite 消息历史，`bot.msg_store` 同步查询              |
-| `PluginManager`    | 扫描/注册插件；`@subscribe` 适配器                     |
+| `PluginManager`    | 扫描/注册插件；包格式加载                              |
+| `PluginRuntime`    | 协调器：发现→解析→加载→启动→快照→热重载              |
+| `PluginContext`    | 受限能力表面：QQAgency、ConfigView、Storage、Scheduler |
+| `PluginStorage`    | 每插件 KV 存储，权限门控，schema 版本迁移              |
 | `ApiClient`        | API 调用的 ACTION 封装，`_QQExec` 最终执行            |
 | `action_queue`     | p=1 拦截 ACTION：block→bypass→spam→rate-limit         |
+| `CommandRegistry`  | 命令索引，别名解析，CQ 码剥离                           |
+| `EventRegistry`    | 类型化消费者分发（CONSUME/CONTINUE），含 wildcard       |
+| `ActionMiddleware` | ACTION 洋葱中间件链（call_next），MiddlewarePipeline    |
 | `LlmSessionLogger` | 每会话日志 →`logs/llm_sessions/`                       |
 
 ### LLM Agent 子系统（`src/core/llm/`，`Bot._init_llm_subsystems()` 挂载）
@@ -55,24 +59,18 @@ No NoneBot / AstrBot / Koishi — core is self-written.
 
 `BusMessage.depth` 上限 10，防无限递归。
 
-### `@subscribe` Direct Handler
-
-`@subscribe(MessageType, priority=N)` 注册的函数签名是 `(payload: object, bot: Bot) -> bool`，`_SubscribeAdapter` 会解包 `msg.payload` 传入，**不是** `BusMessage`。用于非插件式处理器（如 action_queue 拦截 ACTION）。
-
 ### Plugin Return Value Convention
 
-- `match()` → `True`：进入 `handle()`；`False`：跳过
-- `handle()` → `True`：消费事件（EXTERNAL/ACTION 场景停止遍历后续插件）
-- `handle()` → `False`：未处理，让下一个插件试
-
-### Event Type Mapping (EventBus.parse)
-
-`GroupMessageEvent`→`message.group` / `PrivateMessageEvent`→`message.private` / `NoticeEvent`→`notice.{notice_type}` / `dict`-按`post_type`分发 / 其他→丢弃
+- `match(event)` → `True`：进入 `handle(event, ctx)`；`False`：跳过
+- `handle()` → `EventResult.CONSUME` / `True`：消费，停止遍历
+- `handle()` → `EventResult.CONTINUE` / `False`：未处理，继续
+- `bridge.py` Adapter 自动 `EventResult`↔`bool` 互转
 
 ### Plugin Discovery
 
-- `auto_discover()` scans `plugins/*.py`，`_` 开头跳过；修饰器附加 `__plugin__`
-- 禁用：`[plugin].disabled_plugins` 列 `__plugin__.name`
+- 包插件：`plugins/<id>/plugin.toml` + `plugin.py`（`__plugin_id__` + `@on_event` / `@command` / `@on_internal`）
+- `[plugin_config.<id>]` TOML → typed dataclass 注入 `ctx.plugin_config`
+- 禁用：`[plugin].disabled_plugins`；CLI：`python -m src.plugin.cli new/validate/list/doctor`
 
 ### Bot Lifecycle
 
@@ -83,7 +81,7 @@ No NoneBot / AstrBot / Koishi — core is self-written.
 
 ### Constraints
 
-- 插件禁导入 napcat 类型（用 `from src.plugin.base import Event`）；不新增顶层目录；不引入新框架
+- 插件禁导入 napcat 类型（用 `from src.plugin import Event`）；不新增顶层目录；不引入新框架
 - 一个事件最多被一个插件消费（无中间件链）；Commit: `type: description`
 
 ### Logging & Tracing

@@ -2,7 +2,7 @@
 
 from loguru import logger
 
-from src.plugin.definition import EventResult, command
+from src.plugin import EventResult, command
 
 
 class EchoPlugin:

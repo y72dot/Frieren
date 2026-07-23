@@ -8,7 +8,7 @@ from typing import Any
 from loguru import logger
 
 from src.core.llm.content_guard import user_safe_text
-from src.plugin.definition import EventResult, on_internal
+from src.plugin import EventResult, on_internal
 
 _QQ_MSG_LIMIT = 4000
 

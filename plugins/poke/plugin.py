@@ -2,7 +2,7 @@
 
 from loguru import logger
 
-from src.plugin.definition import EventResult, on_event
+from src.plugin import EventResult, on_event
 
 
 def _get(raw: object, key: str, default: object = None) -> object:

@@ -282,6 +282,7 @@ class PluginContext:
         Returns an :class:`asyncio.Task`.
         """
         if self._scope is None:
+            coro.close()
             raise RuntimeError(
                 f"Plugin '{self.plugin_id}': no ResourceScope – "
                 f"cannot create background task"

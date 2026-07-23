@@ -9,8 +9,7 @@ from typing import Any
 import aiofiles
 from loguru import logger
 
-from src.plugin.base import Event
-from src.plugin.definition import EventResult, observe
+from src.plugin import Event, EventResult, observe
 
 
 class HistoryPlugin:

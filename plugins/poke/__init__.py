@@ -31,5 +31,5 @@ async def poke_back(event, bot) -> bool:
     """Legacy-compatible wrapper: (Event, Bot) → bool."""
     ctx = _CompatCtx(bot)
     result = await _instance.poke_back(event, ctx)
-    from src.plugin.definition import EventResult  # noqa: PLC0415
+    from src.plugin import EventResult  # noqa: PLC0415
     return result == EventResult.CONSUME

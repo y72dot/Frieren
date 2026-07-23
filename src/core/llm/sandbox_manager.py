@@ -197,7 +197,7 @@ class SandboxManager:
                     ),
                     timeout=timeout + 5,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return {"ok": False,
                         "error": f"Command timed out after {timeout}s",
                         "stdout": "", "stderr": "", "exit_code": -1}

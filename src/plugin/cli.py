@@ -23,7 +23,7 @@ _PLUGIN_TOML_TMPL = """\
 id = "{name}"
 name = "{Name}"
 version = "0.1.0"
-entrypoint = "{name}.plugin:plugin"
+entrypoint = "plugins.{name}.plugin:{ClassName}"
 sdk = ">=1.0,<2.0"
 description = "{Name} plugin"
 
@@ -36,14 +36,16 @@ scheduler = false
 _PLUGIN_PY_TMPL = '''\
 """Plugin: {Name}"""
 
-from src.plugin import Plugin
-
-plugin = Plugin("{name}")
+from src.plugin import EventResult, command
 
 
-@plugin.command("{name}")
-async def cmd_{name}(ctx, event, args):
-    await ctx.reply(event, "Hello from {Name}!")
+class {ClassName}:
+    __plugin_id__ = "{name}"
+
+    @command("/{name}")
+    async def cmd_{name}(self, event, ctx) -> EventResult:
+        await ctx.reply(event, "Hello from {Name}!")
+        return EventResult.CONSUME
 '''
 
 _TEST_PY_TMPL = '''\
@@ -57,6 +59,16 @@ async def test_{name}_command():
     """Stub test – replace with real logic."""
     assert True
 '''
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _snake_to_pascal(name: str) -> str:
+    """Convert snake_case to PascalCase (e.g. ``hello_world`` → ``HelloWorld``)."""
+    return name.replace("_", " ").title().replace(" ", "")
 
 
 # ---------------------------------------------------------------------------
@@ -78,16 +90,17 @@ def _cmd_new(args: argparse.Namespace) -> int:
         return 1
 
     plugin_dir.mkdir(parents=True)
-    title_name = name.replace("_", " ").title().replace(" ", "")
+    class_name = _snake_to_pascal(name)
+    title_name = class_name
 
     # plugin.toml
     (plugin_dir / "plugin.toml").write_text(
-        _PLUGIN_TOML_TMPL.format(name=name, Name=title_name),
+        _PLUGIN_TOML_TMPL.format(name=name, Name=title_name, ClassName=class_name),
         encoding="utf-8",
     )
     # plugin.py
     (plugin_dir / "plugin.py").write_text(
-        _PLUGIN_PY_TMPL.format(name=name, Name=title_name),
+        _PLUGIN_PY_TMPL.format(name=name, Name=title_name, ClassName=class_name),
         encoding="utf-8",
     )
     # __init__.py

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.core.llm import agent_service as _service
-from src.plugin.definition import EventResult, on_internal
+from src.plugin import EventResult, on_internal
 
 
 class LlmCorePlugin:

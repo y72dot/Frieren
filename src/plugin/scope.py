@@ -74,6 +74,7 @@ class TaskSupervisor:
         Raises ``RuntimeError`` if the supervisor is already closed.
         """
         if self._closed:
+            coro.close()
             raise RuntimeError(
                 f"TaskSupervisor for '{self.plugin_id}' is closed"
             )

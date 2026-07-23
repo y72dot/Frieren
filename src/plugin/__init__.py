@@ -2,6 +2,7 @@
 
 SDK_VERSION = "1.0.0"
 
+from src.plugin.base import Event  # noqa: E402, F401
 from src.plugin.command import CommandMatch, CommandRegistry  # noqa: E402, F401
 from src.plugin.config import (  # noqa: E402, F401
     PluginConfigError,
@@ -15,5 +16,21 @@ from src.plugin.context import (  # noqa: E402, F401
     PluginContext,
     QQAgency,
 )
-from src.plugin.definition import EventResult  # noqa: E402, F401
+from src.plugin.definition import (  # noqa: E402, F401
+    CommandSpec,
+    EventHandlerSpec,
+    EventResult,
+    InternalHandlerSpec,
+    LifecycleHookSpec,
+    ObserverSpec,
+    PluginDefinition,
+    collect_definition,
+    command,
+    observe,
+    on_event,
+    on_internal,
+    on_setup,
+    on_start,
+    on_stop,
+)
 from src.plugin.runtime import PluginRuntime  # noqa: E402, F401

@@ -5,7 +5,7 @@ from __future__ import annotations
 from loguru import logger
 
 from src.core.message_store import _extract_nickname
-from src.plugin.definition import EventResult, on_event
+from src.plugin import EventResult, on_event
 
 
 class LlmGatePlugin:
@@ -76,7 +76,7 @@ class LlmGatePlugin:
 
         ctx = _CompatCtx(bot)
         result = await self._handle(event, ctx)
-        from src.plugin.definition import EventResult
+        from src.plugin import EventResult
         return result == EventResult.CONSUME
 
     async def _handle(self, event, ctx) -> EventResult:

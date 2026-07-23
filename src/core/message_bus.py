@@ -19,7 +19,6 @@ from loguru import logger
 
 if TYPE_CHECKING:
     from src.core.bot import Bot
-    from src.plugin.base import Plugin
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +92,7 @@ class BusMessage:
 class Subscription:
     """A handler registered for a specific message type at a given priority."""
 
-    handler: Plugin
+    handler: Any
     priority: int
     message_type: MessageType
 
@@ -178,7 +177,7 @@ class MessageBus:
     def subscribe(
         self,
         message_type: MessageType,
-        handler: Plugin,
+        handler: Any,
         priority: int,
         scope: SubscriptionScope | None = None,
     ) -> None:

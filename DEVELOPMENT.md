@@ -71,6 +71,8 @@
   - P2：LoadedPlugin 状态机、ResourceScope/TaskSupervisor、setup/start/stop 生命周期、RegistrySnapshot 原子热重载、Bot 生命周期接入 PluginRuntime；
   - P3：PluginContext 公共接口（QQAgency 权限检查、PluginConfigView 只读快照、reply/emit_internal/create_task）、Manifest 权限运行时执行与审计日志、LegacyAdapter（旧插件继续收 Bot，legacy=true 标记）；
   - P4：EventResult (CONSUME/CONTINUE) 语义、EventRegistry/ObserverRegistry 类型化分发、CommandRegistry 命令索引与别名解析、ActionMiddleware 洋葱管线 + MiddlewarePipeline、ACTION 中间件适配器（p=0）、action_queue 迁移为 ActionQueueMiddleware 类；
-- 剩余阶段 P5–P6 尚未开始：配置/存储/Scheduler 基础设施、Control Plane 闭环与兼容层退场。
+- 剩余阶段 P5–P6 已完成：
+  - P5：类型化插件配置、PluginStorage 与迁移、Scheduler/Task 插件归属、CLI/模板/模拟器/doctor、sticker_react/repeater/history/essence 迁移完成；
+  - P6：PLUG-603 + PLUG-604 完成——7 个剩余插件迁移到包格式、删除旧代码（legacy.py/decorators.py/LegacyLoader 等）、1015 tests pass、ruff clean。PLUG-601/602（Control Plane 部署）推迟至后续阶段。
 
 下一项架构工作以 `PLUGIN_SYSTEM_REFACTOR_PLAN.md` 为准。

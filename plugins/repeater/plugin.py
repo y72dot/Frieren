@@ -7,8 +7,7 @@ from typing import Any
 
 from loguru import logger
 
-from src.plugin.base import Event
-from src.plugin.definition import EventResult, on_event
+from src.plugin import Event, EventResult, on_event
 
 _last_repeated: dict[int, str] = {}
 _locks: dict[int, asyncio.Lock] = {}

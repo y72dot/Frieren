@@ -81,7 +81,7 @@ NapCatQQ WebSocket → Bot._process_events (async for raw_event)
 
 ### Constraints
 
-- 插件禁导入 napcat 类型（用 `from src.plugin.base import Event`）；不新增顶层目录；不引入新框架
+- 插件禁导入 napcat 类型（用 `from src.plugin import Event`）；不新增顶层目录；不引入新框架
 - 一个事件最多被一个插件消费（无中间件链）；Commit: `type: description`
 
 ### Logging & Tracing

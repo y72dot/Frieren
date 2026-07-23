@@ -246,33 +246,40 @@ Scheduler 支持：
 
 ## 插件开发
 
-以下是当前仍在运行的兼容接口。计划中的 Manifest、PluginContext 和新手 SDK 尚未实现，目标接口与迁移顺序见 `PLUGIN_SYSTEM_REFACTOR_PLAN.md`；在对应阶段完成前，不要按目标示例编写生产插件。
-
-插件使用内部 `Event`，禁止直接依赖 NapCat 类型：
+插件采用包格式（目录 + `plugin.toml` + `plugin.py` + `__init__.py`）。插件类必须有 `__plugin_id__`，用装饰器注册处理器：
 
 ```python
-from src.plugin.base import Event
-
+from src.plugin import EventResult, command
 
 class MyPlugin:
-    name = "my_plugin"
-    priority = 10
+    __plugin_id__ = "my_plugin"
 
-    def match(self, event: Event) -> bool:
-        return event.is_group and event.message.startswith("/hello")
+    @command("/hello")
+    async def hello(self, event, ctx) -> EventResult:
+        await ctx.reply(event, "你好！")
+        return EventResult.CONSUME
+```
 
-    async def handle(self, event: Event, bot) -> bool:
-        await bot.api.send_group_msg(event.group_id, "你好")
-        return True
+`plugin.toml` 声明元数据、入口点和权限：
+
+```toml
+[plugin]
+id = "my_plugin"
+version = "1.0.0"
+entrypoint = "plugins.my_plugin.plugin:MyPlugin"
+sdk = ">=1.0,<2.0"
+
+[permissions]
+qq = ["message.send"]
 ```
 
 约定：
-
-- `match() == True` 才执行 `handle()`；
-- `handle()` 返回 `EventResult.CONSUME` / `True` 表示消费事件，后续插件不再执行；
-- `handle()` 返回 `EventResult.CONTINUE` / `False` 继续尝试下一个插件；
-- `@subscribe` 直接处理器签名为 `(payload, bot) -> bool`；
-- 插件文件放在 `plugins/`，以下划线开头的文件不会自动发现。
+- `ctx.reply(event, msg)` 快捷回复；`ctx.api` 提供受权限检查的 QQAgency；
+- `ctx.config` 为 PluginConfigView（bot_id、nickname、admin_users、llm_enabled）；
+- `ctx.storage` 为每插件 KV 存储；`ctx.create_task()` 创建受托管的后台任务；
+- 处理器返回 `EventResult.CONSUME` 消费事件，`EventResult.CONTINUE` 继续分发；
+- 命令行：`python -m src.plugin.cli new/validate/list/doctor`；
+- 禁止直接依赖 NapCat 类型，使用 `from src.plugin import Event`。
 
 ## 项目结构
 

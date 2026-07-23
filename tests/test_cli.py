@@ -21,7 +21,6 @@ class TestCliNew:
 
         # Replace Path("plugins") to point to our tmp.
         import src.plugin.cli as cli_mod
-        orig_path = cli_mod.Path
         monkeypatch.setattr(cli_mod, "Path", lambda p: tmp_path / p)
 
         exit_code = cli_main(["new", "hello"])
@@ -36,7 +35,28 @@ class TestCliNew:
         # Verify toml content.
         toml_text = (plugin_dir / "plugin.toml").read_text()
         assert 'id = "hello"' in toml_text
-        assert 'entrypoint = "hello.plugin:plugin"' in toml_text
+        assert 'entrypoint = "plugins.hello.plugin:Hello"' in toml_text
+
+        # Verify plugin.py content and importability.
+        py_text = (plugin_dir / "plugin.py").read_text()
+        assert "class Hello:" in py_text
+        assert '__plugin_id__ = "hello"' in py_text
+        assert "from src.plugin import EventResult, command" in py_text
+
+        # Smoke test: generated code should be importable.
+        import importlib.util
+        import sys
+        spec = importlib.util.spec_from_file_location(
+            "hello_plugin",
+            str(plugin_dir / "plugin.py"),
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["hello_plugin"] = module
+        try:
+            spec.loader.exec_module(module)
+            assert module.Hello.__plugin_id__ == "hello"
+        finally:
+            del sys.modules["hello_plugin"]
 
     def test_new_rejects_invalid_name(self, tmp_path: Path, monkeypatch):
         """`new` rejects invalid plugin name (not snake_case)."""

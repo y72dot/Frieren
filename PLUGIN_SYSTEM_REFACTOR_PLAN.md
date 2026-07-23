@@ -3,7 +3,7 @@
 > 文档状态：当前执行计划  
 > 编制日期：2026-07-22  
 > 适用范围：`src/plugin/`、`src/core/message_bus.py`、插件装载相关 Bot 生命周期、`plugins/`、Control Plane 插件部署链路及相关测试  
-> 当前阶段：P0+P1+P2+P3+P4+P5+P6 完成
+> 当前阶段：P0+P1+P2+P3+P4+P5 完成，P6 部分完成（PLUG-603/604 完成，PLUG-601/602 推迟）
 > 任务真源：本文第 20 节  
 > 原则：渐进迁移、行为兼容、阶段可回滚、不引入 NoneBot/AstrBot/Koishi
 
@@ -668,7 +668,7 @@ python scripts/run_e2e.py --levels L0,L1,L2,L3
 
 > **完成记录 (2026-07-23)**：PLUG-603 + PLUG-604 完整执行——7 个剩余插件（ping、echo、poke、llm_core、llm_sender、llm_gate、action_queue）全部迁移到包格式。删除所有旧代码：`src/plugin/legacy.py`、`Plugin` Protocol（base.py）、旧装饰器（decorators.py）、`LegacyLoader`、`_import_legacy_plugin()`、`_is_legacy_class_plugin()`、bot 兜底（lifecycle.py）。Adapter 类移至 `src/plugin/bridge.py`。1015 tests pass，ruff clean。增刊上下文新增 `llm_enabled` 与 `record_bot_message()`。
 >
-> Control Plane 部署（PLUG-601/602）推迟到后续阶段，不在本次 P6 范围内。当前所有 11 个插件均为包格式，无遗留 .py 单文件或旧 API 调用。
+> Control Plane 部署（PLUG-601/602）推迟到后续阶段，不在本次 P6 范围内。当前 10 个包插件均为包格式；`action_queue.py` 为 Runtime 直接加载的核心中间件（单文件，已迁移到 `ActionQueueMiddleware` 类 API），无遗留旧 API 调用。
 
 ## 18. 协作者拆分与合并边界
 
@@ -759,8 +759,8 @@ python scripts/run_e2e.py --levels L0,L1,L2,L3
 | PLUG-503 | P5 | Scheduler/Task 插件归属 | DONE | PLUG-301 | `tests/test_scheduler_agency.py` |
 | PLUG-504 | P5 | CLI、模板、模拟器、doctor | DONE | PLUG-103, PLUG-301 | `tests/test_cli.py` |
 | PLUG-505 | P5 | 迁移 M2–M4 插件 | DONE | PLUG-401, PLUG-501, PLUG-502 | sticker_react, repeater, history, essence 迁移完成 |
-| PLUG-601 | P6 | Control Plane 整包原子部署 | DEFERRED | PLUG-204 | 推迟至后续阶段 |
-| PLUG-602 | P6 | 启停升级回滚接入 Runtime | DEFERRED | PLUG-601 | 推迟至后续阶段 |
+| PLUG-601 | P6 | Control Plane 整包原子部署 | BLOCKED | PLUG-204 | 推迟至后续阶段 |
+| PLUG-602 | P6 | 启停升级回滚接入 Runtime | BLOCKED | PLUG-601 | 推迟至后续阶段 |
 | PLUG-603 | P6 | 完成插件迁移与旧调用清零 | DONE | PLUG-505 | 7 插件迁移，全量 1015 tests pass |
 | PLUG-604 | P6 | 删除兼容层并更新当前文档 | DONE | PLUG-603 | legacy.py/decorators.py/LegacyLoader 删除，ruff clean |
 
