@@ -297,6 +297,7 @@ class AgentLoop:
             BusMessage(
                 type=MessageType.INTERNAL,
                 payload={
+                    "topic": "send",
                     "llm_type": "send",
                     "target_id": target_id,
                     "is_group": ctx.group_id is not None,

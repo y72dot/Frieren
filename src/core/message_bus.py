@@ -21,6 +21,50 @@ if TYPE_CHECKING:
     from src.core.bot import Bot
     from src.plugin.base import Plugin
 
+
+# ---------------------------------------------------------------------------
+# SubscriptionScope – bulk subscription management
+# ---------------------------------------------------------------------------
+
+
+class SubscriptionScope:
+    """Groups subscriptions so they can be bulk-unsubscribed via :meth:`close`.
+
+    Each plugin gets one scope per generation.  The scope tracks every
+    subscription made through it and removes them all when closed.
+
+    ``close()`` is idempotent -- calling it more than once is a no-op.
+    """
+
+    def __init__(
+        self, plugin_id: str, generation: int, bus: MessageBus
+    ) -> None:
+        self.plugin_id = plugin_id
+        self.generation = generation
+        self._bus = bus
+        self._tokens: list[tuple[MessageType, str]] = []
+        self._closed = False
+
+    def close(self) -> None:
+        """Remove all subscriptions created in this scope.  Idempotent."""
+        if self._closed:
+            return
+        for msg_type, handler_name in self._tokens:
+            self._bus.unsubscribe(msg_type, handler_name)
+        count = len(self._tokens)
+        self._tokens.clear()
+        self._closed = True
+        logger.debug(
+            f"Scope closed: plugin={self.plugin_id} gen={self.generation} "
+            f"removed={count}"
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"SubscriptionScope(plugin_id={self.plugin_id!r}, "
+            f"generation={self.generation}, closed={self._closed})"
+        )
+
 # ---------------------------------------------------------------------------
 # types
 # ---------------------------------------------------------------------------
@@ -136,8 +180,13 @@ class MessageBus:
         message_type: MessageType,
         handler: Plugin,
         priority: int,
+        scope: SubscriptionScope | None = None,
     ) -> None:
-        """Register *handler* for *message_type* at the given *priority*."""
+        """Register *handler* for *message_type* at the given *priority*.
+
+        If *scope* is provided, the subscription is tracked and will be
+        removed when ``scope.close()`` is called.
+        """
         # Don't allow overriding the built-in QQExec.
         if handler.name == "_qq_exec":
             existing = [
@@ -161,6 +210,10 @@ class MessageBus:
             handler=handler, priority=priority, message_type=message_type
         )
         self._subscriptions[message_type].append(sub)
+
+        if scope is not None:
+            scope._tokens.append((message_type, handler.name))
+
         logger.debug(
             f"Subscribed '{handler.name}' to {message_type.value} (priority={priority})"
         )
@@ -179,6 +232,24 @@ class MessageBus:
     def subscription_count(self) -> int:
         """Total number of subscriptions across all message types."""
         return sum(len(v) for v in self._subscriptions.values())
+
+    def create_scope(
+        self, plugin_id: str, generation: int = 1
+    ) -> SubscriptionScope:
+        """Create a new :class:`SubscriptionScope` for a plugin generation.
+
+        All subscriptions made with this scope (by passing it to
+        :meth:`subscribe`) are tracked and will be bulk-removed when
+        ``scope.close()`` is called.
+
+        Parameters
+        ----------
+        plugin_id:
+            Stable plugin identifier (e.g. ``"ping"``).
+        generation:
+            Monotonic generation counter for hot-reload tracking.
+        """
+        return SubscriptionScope(plugin_id, generation, self)
 
     # ------------------------------------------------------------------
     # dispatch (immediate)

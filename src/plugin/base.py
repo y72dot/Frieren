@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import Any
 
 from src.core.message_bus import BusMessage, MessageType  # noqa: F401  – re-export
-
-if TYPE_CHECKING:
-    from src.core.bot import Bot
 
 
 @dataclass
@@ -48,34 +45,3 @@ class Event:
 
     peer_id: int | None = None
     """Private-conversation peer, especially for bot-originated messages."""
-
-
-@runtime_checkable
-class Plugin(Protocol):
-    """Protocol that every plugin must satisfy.
-
-    Plugins do **not** need to inherit from this class – any object with the
-    matching attributes and methods will pass :func:`isinstance` checks thanks
-    to :func:`runtime_checkable`.
-    """
-
-    name: str
-    """Unique plugin name (used for disable lists and logging)."""
-
-    priority: int
-    """Lower values are matched first."""
-
-    def match(self, event: Event) -> bool:
-        """Return ``True`` if this plugin wants to handle *event*."""
-        ...
-
-    async def handle(self, event: Event, bot: Bot) -> bool:
-        """Handle the event.
-
-        Returns
-        -------
-        bool
-            ``True`` if the event was consumed (stop further matching),
-            ``False`` to continue trying other plugins.
-        """
-        ...

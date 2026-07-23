@@ -546,3 +546,120 @@ async def test_admin_bypasses_plugin_filter_in_dispatch():
     assert result is True
     assert plugin.match_called is True
     assert plugin.handle_called is True
+
+
+# -------------------------------------------------------------------
+# SubscriptionScope – scoped bulk unsubscribe
+# -------------------------------------------------------------------
+
+
+def test_scope_subscribe_and_close():
+    """Subscriptions made through a scope should be removed on close."""
+    bus = MessageBus()
+    scope = bus.create_scope("test_plugin", generation=1)
+
+    count_before = bus.subscription_count
+
+    plugin = _PingPlugin()
+    bus.subscribe(MessageType.EXTERNAL, plugin, 0, scope=scope)
+    assert bus.subscription_count == count_before + 1
+
+    scope.close()
+    assert bus.subscription_count == count_before  # all scope subs removed
+
+
+def test_scope_close_idempotent():
+    """Closing a scope twice should not raise or double-unsubscribe."""
+    bus = MessageBus()
+    scope = bus.create_scope("test_plugin", generation=1)
+
+    bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 0, scope=scope)
+    count_after_sub = bus.subscription_count
+
+    scope.close()
+    assert bus.subscription_count == count_after_sub - 1
+
+    # Second close should be a no-op
+    scope.close()
+    assert bus.subscription_count == count_after_sub - 1
+
+
+def test_scope_multiple_subscriptions():
+    """A scope should track subscriptions across multiple message types."""
+    bus = MessageBus()
+    scope = bus.create_scope("multi", generation=1)
+
+    ping = _PingPlugin()
+    listener = _InternalListener("listener_a")
+
+    count_before = bus.subscription_count
+    bus.subscribe(MessageType.EXTERNAL, ping, 0, scope=scope)
+    bus.subscribe(MessageType.INTERNAL, listener, 10, scope=scope)
+
+    assert bus.subscription_count == count_before + 2
+
+    scope.close()
+    assert bus.subscription_count == count_before  # both removed
+
+
+def test_scope_no_cross_interference():
+    """Closing one scope should not affect subscriptions in another scope."""
+    bus = MessageBus()
+    scope_a = bus.create_scope("plugin_a", generation=1)
+    scope_b = bus.create_scope("plugin_b", generation=1)
+
+    ping = _PingPlugin()
+    echo = _EchoPlugin()
+
+    count_before = bus.subscription_count
+    bus.subscribe(MessageType.EXTERNAL, ping, 0, scope=scope_a)
+    bus.subscribe(MessageType.EXTERNAL, echo, 10, scope=scope_b)
+    assert bus.subscription_count == count_before + 2
+
+    scope_a.close()
+    # Only ping should be removed
+    assert bus.subscription_count == count_before + 1
+
+    # Verify echo is still present
+    subs = bus._subscriptions[MessageType.EXTERNAL]
+    names = [s.handler.name for s in subs]
+    assert "echo" in names
+    assert "ping" not in names
+
+    scope_b.close()
+    assert bus.subscription_count == count_before
+
+
+@pytest.mark.asyncio
+async def test_scope_closed_handler_not_dispatched():
+    """After a scope is closed, its handlers should no longer receive events."""
+    bus = MessageBus()
+    scope = bus.create_scope("temp", generation=1)
+
+    plugin = _CountingPlugin("temp_counter")
+    bus.subscribe(MessageType.EXTERNAL, plugin, 0, scope=scope)
+
+    scope.close()
+
+    from src.plugin.base import Event
+
+    event = Event(type="message.group", user_id=1, message="hello")
+    msg = BusMessage(type=MessageType.EXTERNAL, payload=event)
+
+    class _Bot:
+        def __init__(self, bus_obj):
+            self.message_bus = bus_obj
+            self.filter_mgr = FilterManager()
+
+    await bus.dispatch(msg, _Bot(bus))
+    assert plugin.match_called is False
+    assert plugin.handle_called is False
+
+
+def test_subscribe_without_scope_still_works():
+    """Backward compatibility: subscribing without a scope works as before."""
+    bus = MessageBus()
+    count_before = bus.subscription_count
+
+    bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 0)  # no scope
+    assert bus.subscription_count == count_before + 1

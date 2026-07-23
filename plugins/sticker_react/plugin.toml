@@ -1,0 +1,12 @@
+[plugin]
+id = "sticker_react"
+name = "StickerReact"
+version = "1.0.0"
+entrypoint = "plugins.sticker_react.plugin:StickerReactPlugin"
+sdk = ">=1.0,<2.0"
+description = "Reacts to replied messages with stickers/emoji using the 贴 prefix"
+
+[permissions]
+qq = ["message.react"]
+storage = []
+scheduler = false

@@ -1,0 +1,12 @@
+[plugin]
+id = "history"
+name = "History"
+version = "1.0.0"
+entrypoint = "plugins.history.plugin:HistoryPlugin"
+sdk = ">=1.0,<2.0"
+description = "Logs every message event to a JSONL file"
+
+[permissions]
+qq = []
+storage = ["plugin"]
+scheduler = false

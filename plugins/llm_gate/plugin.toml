@@ -1,0 +1,12 @@
+[plugin]
+id = "llm_gate"
+name = "LLM Gate"
+version = "1.0.0"
+entrypoint = "plugins.llm_gate.plugin:LlmGatePlugin"
+sdk = ">=1.0,<2.0"
+description = "@bot detection, access control, and LLM trigger emission"
+
+[permissions]
+qq = ["message.send"]
+storage = []
+scheduler = false

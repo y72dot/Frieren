@@ -35,7 +35,8 @@ NapCatQQ WebSocket
               ├→ Scheduler / Memory
               └→ Control Plane Proposal
   → MessageBus.ACTION
-  → block / bypass / spam / rate-limit
+  → MiddlewarePipeline (ActionQueueMiddleware → _raw_call)
+  → (compat) block / bypass / spam / rate-limit
   → NapCat API
   → 出站消息持久化
 ```
@@ -245,6 +246,8 @@ Scheduler 支持：
 
 ## 插件开发
 
+以下是当前仍在运行的兼容接口。计划中的 Manifest、PluginContext 和新手 SDK 尚未实现，目标接口与迁移顺序见 `PLUGIN_SYSTEM_REFACTOR_PLAN.md`；在对应阶段完成前，不要按目标示例编写生产插件。
+
 插件使用内部 `Event`，禁止直接依赖 NapCat 类型：
 
 ```python
@@ -266,8 +269,8 @@ class MyPlugin:
 约定：
 
 - `match() == True` 才执行 `handle()`；
-- `handle() == True` 表示消费 EXTERNAL/ACTION 消息，后续插件不再执行；
-- `handle() == False` 继续尝试下一个插件；
+- `handle()` 返回 `EventResult.CONSUME` / `True` 表示消费事件，后续插件不再执行；
+- `handle()` 返回 `EventResult.CONTINUE` / `False` 继续尝试下一个插件；
 - `@subscribe` 直接处理器签名为 `(payload, bot) -> bool`；
 - 插件文件放在 `plugins/`，以下划线开头的文件不会自动发现。
 
@@ -315,7 +318,7 @@ python scripts/benchmark.py --enforce
 
 当前验收结果：
 
-- 主机全量：`682 passed, 2 skipped`；
+- 主机全量：`998 passed, 2 skipped`（含插件系统 P0–P4 新增 175 tests）；
 - 主机 L0-L5：`193 passed, 1 conditional skip`；
 - Docker/Linux L0-L5：`194 passed`；
 - 写入吞吐：约 `2441 messages/s`；
@@ -372,14 +375,11 @@ cp -r backups/20260722_120000/frieren-config/* instances/frieren/
 
 恢复前应停止相关容器并保留当前目录副本。恢复后执行健康检查、L0-L5 和目标服务器故障演练。
 
-## 详细设计文档
+## 开发文档
 
-- `REFACTOR_PLAN.md`：完整架构和分阶段重构方案；
-- `PHASE1_IMPLEMENTATION.md`：ConfigCenter 与 PromptRegistry；
-- `PHASE2_IMPLEMENTATION.md`：无损 QQ Adapter 与消息数据库；
-- `PHASE3_IMPLEMENTATION.md`：Artifact Store 与 QQ 文件；
-- `PHASE4_IMPLEMENTATION.md`：离线历史回补；
-- `PHASE5_IMPLEMENTATION.md`：Tool Platform；
-- `PHASE6_IMPLEMENTATION.md`：Durable Runtime 与 Scheduler；
-- `PHASE7_IMPLEMENTATION.md`：本地/Web 搜索与 Control Plane；
-- `PHASE8_IMPLEMENTATION.md`：全量 E2E 与生产切换门禁。
+- `DEVELOPMENT.md`：所有开发文档的统一入口、当前状态和维护规则；
+- `PLUGIN_SYSTEM_REFACTOR_PLAN.md`：当前插件系统重构的详细执行计划与任务真源；
+- `REFACTOR_PLAN.md`：已完成的 Agent 能力平台总体设计基线；
+- `PHASE1_IMPLEMENTATION.md` 至 `PHASE8_IMPLEMENTATION.md`：各阶段历史实施与验收记录；
+- `LLM_TOOL_REFACTOR_PLAN.md`：LLM Tool 与消息插件分离的专项完成记录；
+- `PLAN.md`：项目建立早期蓝图，仅作历史参考。

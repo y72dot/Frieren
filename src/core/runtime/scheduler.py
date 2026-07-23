@@ -33,6 +33,8 @@ class ScheduleRecord:
     max_concurrency: int
     created_at: int
     updated_at: int
+    plugin_id: str = ""
+    plugin_generation: int = 0
 
     def trigger_spec(self) -> dict[str, Any]:
         return json.loads(self.trigger_spec_json)
@@ -46,7 +48,7 @@ class ScheduleStore:
         "schedule_id, name, enabled, trigger_type, trigger_spec_json, timezone, "
         "task_template_json, target_conversation_type, target_conversation_id, "
         "created_by, next_run_at, last_run_at, misfire_policy, max_concurrency, "
-        "created_at, updated_at"
+        "created_at, updated_at, plugin_id, plugin_generation"
     )
 
     def __init__(self, connection: sqlite3.Connection) -> None:
@@ -75,6 +77,21 @@ class ScheduleStore:
                 ON schedules(enabled, next_run_at);
             """
         )
+        # Migration: add plugin_id / plugin_generation columns if missing.
+        import contextlib
+
+        for col, col_def in [
+            ("plugin_id", "TEXT NOT NULL DEFAULT ''"),
+            ("plugin_generation", "INTEGER NOT NULL DEFAULT 0"),
+        ]:
+            with contextlib.suppress(sqlite3.OperationalError):
+                self.connection.execute(
+                    f"ALTER TABLE schedules ADD COLUMN {col} {col_def}"
+                )
+        with contextlib.suppress(sqlite3.OperationalError):
+            self.connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_schedules_plugin ON schedules(plugin_id)"
+            )
         self.connection.commit()
 
     def create(
@@ -91,6 +108,8 @@ class ScheduleStore:
         misfire_policy: str = "run_once",
         max_concurrency: int = 1,
         now: int | None = None,
+        plugin_id: str = "",
+        plugin_generation: int = 0,
     ) -> ScheduleRecord:
         now = int(time.time()) if now is None else int(now)
         _validate_schedule(trigger_type, trigger_spec, timezone, misfire_policy)
@@ -107,8 +126,9 @@ class ScheduleStore:
                    schedule_id, name, enabled, trigger_type, trigger_spec_json,
                    timezone, task_template_json, target_conversation_type,
                    target_conversation_id, created_by, next_run_at, last_run_at,
-                   misfire_policy, max_concurrency, created_at, updated_at
-               ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)""",
+                   misfire_policy, max_concurrency, created_at, updated_at,
+                   plugin_id, plugin_generation
+               ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)""",
             (
                 schedule_id,
                 name,
@@ -124,6 +144,8 @@ class ScheduleStore:
                 max(1, int(max_concurrency)),
                 now,
                 now,
+                plugin_id,
+                plugin_generation,
             ),
         )
         self.connection.commit()
@@ -191,6 +213,23 @@ class ScheduleStore:
     def delete(self, schedule_id: str) -> None:
         self.connection.execute("DELETE FROM schedules WHERE schedule_id=?", (schedule_id,))
         self.connection.commit()
+
+    def list_by_plugin(self, plugin_id: str) -> list[ScheduleRecord]:
+        """Return all schedules owned by *plugin_id*."""
+        rows = self.connection.execute(
+            f"SELECT {self._COLUMNS} FROM schedules WHERE plugin_id=? "
+            "ORDER BY created_at, schedule_id",
+            (plugin_id,),
+        ).fetchall()
+        return [_schedule_from_row(row) for row in rows]
+
+    def cancel_by_plugin(self, plugin_id: str) -> int:
+        """Delete all schedules owned by *plugin_id*. Returns count of deleted."""
+        c = self.connection.execute(
+            "DELETE FROM schedules WHERE plugin_id=?", (plugin_id,)
+        )
+        self.connection.commit()
+        return c.rowcount
 
 
 class SchedulerService:

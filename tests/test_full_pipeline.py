@@ -81,7 +81,7 @@ class TestRawEventToApiCall:
         """Raw dict event → parsed → dispatched → plugin handles → API called."""
         bus = MessageBus()
         bot = _PipelineBot(bus)
-        bot.plugin_manager.register(_EchoPlugin())
+        bot.message_bus.subscribe(MessageType.EXTERNAL, _EchoPlugin(), 10)
 
         raw = {
             "post_type": "message",
@@ -137,8 +137,8 @@ class TestRawEventToApiCall:
                 handled_by.append("p50")
                 return True
 
-        bot.plugin_manager.register(_Priority10())
-        bot.plugin_manager.register(_Priority50())
+        bot.message_bus.subscribe(MessageType.EXTERNAL, _Priority10(), 10)
+        bot.message_bus.subscribe(MessageType.EXTERNAL, _Priority50(), 50)
 
         raw = {
             "post_type": "message",
@@ -199,7 +199,7 @@ class TestFilterPipeline:
                 plugin_was_called = True
                 return True
 
-        bot.plugin_manager.register(_TestPlugin())
+        bot.message_bus.subscribe(MessageType.EXTERNAL, _TestPlugin(), 0)
 
         raw = {
             "post_type": "message",
@@ -224,7 +224,7 @@ class TestLLMPipelineIntegration:
         from plugins.llm_sender import llm_sender_handler
         from src.core.llm import LlmResponse
         from src.core.message_bus import MessageType
-        from src.plugin.manager import _SubscribeAdapter
+        from src.plugin.bridge import _SubscribeAdapter
 
         # Pre-init tool registry
         _lazy_init(bot_with_llm)

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from src.core.llm.tools.providers.artifact import register_artifact_tools
 from src.core.llm.sandbox import RiskLevel
 from src.core.llm.tool_catalog import ToolCatalog
+from src.core.llm.tools.providers.artifact import register_artifact_tools
 
 
 def test_registers_artifact_agent_tools_with_risk_levels():

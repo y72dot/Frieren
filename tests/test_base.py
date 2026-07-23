@@ -1,25 +1,6 @@
-"""Tests for Event model and Plugin Protocol."""
+"""Tests for Event model."""
 
-from src.plugin.base import Event, Plugin
-
-
-class _ValidPlugin:
-    name = "test"
-    priority = 0
-
-    def match(self, event: Event) -> bool:
-        return True
-
-    async def handle(self, event: Event, bot) -> bool:
-        return True
-
-
-class _MissingHandle:
-    name = "test"
-    priority = 0
-
-    def match(self, event: Event) -> bool:
-        return True
+from src.plugin.base import Event
 
 
 def test_event_creation():
@@ -44,13 +25,3 @@ def test_event_raw_stores_arbitrary_object():
     raw = {"post_type": "message", "message_type": "group"}
     e = Event(type="message.group", raw=raw, user_id=1)
     assert e.raw is raw
-
-
-def test_plugin_protocol_isinstance():
-    p = _ValidPlugin()
-    assert isinstance(p, Plugin)
-
-
-def test_plugin_missing_handle_not_plugin():
-    p = _MissingHandle()
-    assert not isinstance(p, Plugin)

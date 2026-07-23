@@ -1,0 +1,12 @@
+[plugin]
+id = "llm_core"
+name = "LLM Core"
+version = "1.0.0"
+entrypoint = "plugins.llm_core.plugin:LlmCorePlugin"
+sdk = ">=1.0,<2.0"
+description = "Core LLM agent service adapter – handles INTERNAL trigger messages"
+
+[permissions]
+qq = []
+storage = []
+scheduler = false

@@ -9,7 +9,6 @@ import pytest
 from src.core.llm import ToolCall
 from tests.conftest_e2e import e2e_bot  # noqa: F401
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------

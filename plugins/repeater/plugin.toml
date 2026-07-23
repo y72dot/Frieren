@@ -1,0 +1,12 @@
+[plugin]
+id = "repeater"
+name = "Repeater"
+version = "1.0.0"
+entrypoint = "plugins.repeater.plugin:RepeaterPlugin"
+sdk = ">=1.0,<2.0"
+description = "Repeats the latest group message when two most recent messages match"
+
+[permissions]
+qq = ["message.send", "message.react"]
+storage = []
+scheduler = false

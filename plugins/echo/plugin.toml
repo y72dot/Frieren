@@ -1,0 +1,12 @@
+[plugin]
+id = "echo"
+name = "Echo"
+version = "1.0.0"
+entrypoint = "plugins.echo.plugin:EchoPlugin"
+sdk = ">=1.0,<2.0"
+description = "Echoes back the message following /echo"
+
+[permissions]
+qq = ["message.send"]
+storage = []
+scheduler = false

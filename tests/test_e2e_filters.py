@@ -6,17 +6,13 @@ import pytest
 
 from src.core.config import (
     BotConfig,
-    BotConfigSection,
     FilterConfig,
     FilterModeConfig,
-    LoggingConfigSection,
-    NapCatConfig,
-    PluginConfig,
     PluginFilterConfig,
 )
+from src.core.message_bus import MessageType
 from src.plugin.base import Event
 from tests.conftest_e2e import dispatch_raw_event, e2e_bot  # noqa: F401
-
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -73,7 +69,7 @@ class TestGlobalFilters:
             group=FilterModeConfig(mode="blacklist", list=[456]),
         )
         plugin, was_called = _plugin_was_called_collector()
-        e2e_bot.plugin_manager.register(plugin)
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, plugin, 0)
 
         raw = {
             "post_type": "message",
@@ -97,7 +93,7 @@ class TestGlobalFilters:
             group=FilterModeConfig(mode="whitelist", list=[999]),
         )
         plugin, was_called = _plugin_was_called_collector()
-        e2e_bot.plugin_manager.register(plugin)
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, plugin, 0)
 
         # Non-whitelisted → blocked
         raw_bad = {
@@ -126,7 +122,7 @@ class TestGlobalFilters:
                 called2 = True
                 return True
 
-        e2e_bot.plugin_manager.register(_P2())
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _P2(), 0)
         raw_good = {
             "post_type": "message",
             "message_type": "group",
@@ -148,7 +144,7 @@ class TestGlobalFilters:
             group=FilterModeConfig(mode="blacklist", list=[456]),
         )
         plugin, was_called = _plugin_was_called_collector()
-        e2e_bot.plugin_manager.register(plugin)
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, plugin, 0)
 
         raw = {
             "post_type": "message",
@@ -172,7 +168,7 @@ class TestGlobalFilters:
             group=FilterModeConfig(mode="blacklist", list=[456]),
         )
         plugin, was_called = _plugin_was_called_collector()
-        e2e_bot.plugin_manager.register(plugin)
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, plugin, 0)
 
         raw = {
             "post_type": "message",
@@ -196,7 +192,7 @@ class TestGlobalFilters:
             group=FilterModeConfig(mode="blacklist", list=[456]),
         )
         plugin, was_called = _plugin_was_called_collector()
-        e2e_bot.plugin_manager.register(plugin)
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, plugin, 0)
 
         raw = {
             "post_type": "message",
@@ -227,7 +223,7 @@ class TestGlobalFilters:
             return event.type.startswith("notice.")
 
         plugin.match = orig_match
-        e2e_bot.plugin_manager.register(plugin)
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, plugin, 0)
 
         raw = {
             "post_type": "notice",
@@ -250,7 +246,7 @@ class TestGlobalFilters:
             private=FilterModeConfig(mode="blacklist", list=[789]),
         )
         plugin, was_called = _plugin_was_called_collector()
-        e2e_bot.plugin_manager.register(plugin)
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, plugin, 0)
 
         # Blocked private user
         raw_blocked = {
@@ -278,7 +274,7 @@ class TestGlobalFilters:
                 called2 = True
                 return True
 
-        e2e_bot.plugin_manager.register(_P2())
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _P2(), 0)
         raw_ok = {
             "post_type": "message",
             "message_type": "private",
@@ -334,8 +330,8 @@ class TestPerPluginFilters:
                 unblocked_called = True
                 return True
 
-        e2e_bot.plugin_manager.register(_BlockedPlugin())
-        e2e_bot.plugin_manager.register(_UnblockedPlugin())
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _BlockedPlugin(), 5)
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _UnblockedPlugin(), 10)
 
         raw = {
             "post_type": "message",

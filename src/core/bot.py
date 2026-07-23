@@ -20,6 +20,7 @@ from src.core.history import HistoryQueryService, HistorySyncService
 from src.core.message_bus import MessageBus
 from src.core.message_store import MessageStore
 from src.plugin.manager import PluginManager
+from src.plugin.runtime import PluginRuntime
 from src.utils.logger import setup_logging
 
 
@@ -72,7 +73,10 @@ class Bot:
         self.ensure_control_plane()
         self.history_gateway = QQHistoryGateway(self.api)
         self._configure_history()
-        self.plugin_manager = PluginManager(bus=self.message_bus)
+        self.plugin_runtime = PluginRuntime(bus=self.message_bus, bot=self)
+        self.plugin_manager = PluginManager(
+            bus=self.message_bus, runtime=self.plugin_runtime
+        )
         self.llm_provider = None
         self.config_center = None
         self.prompt_registry = None
@@ -157,7 +161,7 @@ class Bot:
             logger.info(f"Message projections recovered: {recovered_events}")
 
         if cfg.plugin.auto_discover:
-            count = self.plugin_manager.auto_discover(
+            count = await self.plugin_runtime.activate(
                 plugin_dirs=cfg.plugin.plugin_dirs,
                 disabled=cfg.plugin.disabled_plugins,
             )
@@ -222,16 +226,19 @@ class Bot:
             self._main_task.cancel()
 
     async def reload_plugins(self) -> None:
-        """Hot-reload plugins (re-run auto-discovery on configured dirs)."""
+        """Hot-reload plugins via PluginRuntime.
+
+        Old plugin generations are automatically drained by the runtime.
+        """
         if self.config is None:
             logger.warning("Cannot reload plugins: config not loaded")
             return
-        self.plugin_manager = PluginManager(bus=self.message_bus)
-        self.plugin_manager.auto_discover(
+
+        count = await self.plugin_runtime.reload(
             plugin_dirs=self.config.plugin.plugin_dirs,
             disabled=self.config.plugin.disabled_plugins,
         )
-        logger.info("Plugins reloaded")
+        logger.info(f"Plugins reloaded: {count} active")
 
     def discover_message_artifacts(self, message_id: int) -> None:
         """Discover resources, rebinding after an injected MessageStore swap."""
@@ -674,6 +681,8 @@ class Bot:
             task.cancel()
         if self._artifact_tasks:
             await asyncio.gather(*self._artifact_tasks, return_exceptions=True)
+        await self.plugin_runtime.shutdown()
+        self.plugin_manager.close()
         self.artifact_store.close()
         self.msg_store.close()
         self.api.clear_client()

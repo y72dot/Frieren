@@ -1,0 +1,12 @@
+[plugin]
+id = "essence"
+name = "Essence"
+version = "1.0.0"
+entrypoint = "plugins.essence.plugin:EssencePlugin"
+sdk = ">=1.0,<2.0"
+description = "Set or remove group essence messages via reply + keyword"
+
+[permissions]
+qq = ["message.send", "message.react", "group.manage"]
+storage = []
+scheduler = false

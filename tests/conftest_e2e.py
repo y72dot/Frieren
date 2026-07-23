@@ -17,7 +17,6 @@ from src.core.message_bus import MessageType
 # ---------------------------------------------------------------------------
 # Re-export conftest.py fixtures so E2E test files can import from here
 # ---------------------------------------------------------------------------
-
 # These are discovered automatically by pytest; the imports below are just
 # to satisfy type-checkers and avoid "unused import" warnings.
 from tests.conftest import (  # noqa: F401
@@ -34,7 +33,6 @@ from tests.conftest import (  # noqa: F401
     plugin_manager,
 )
 
-
 # ---------------------------------------------------------------------------
 # State reset
 # ---------------------------------------------------------------------------
@@ -43,7 +41,10 @@ from tests.conftest import (  # noqa: F401
 def _reset_all_module_state() -> None:
     """Clear all module-level mutable state between E2E tests."""
     import plugins.llm_core as lc
-    from plugins.action_queue import reset_state as reset_aq
+
+    # action_queue reset is a no-op since P6 (middleware is instance-based).
+    # Kept for minimal diff – the import is now a harmless no-op passthrough.
+    from plugins.action_queue import reset_state as reset_aq  # noqa: F841
 
     lc._session_cache.clear()
     # Reassign (don't .clear()) because _tools_registry may share the
@@ -90,7 +91,7 @@ def _register_llm_handlers(bot) -> None:
     """Register the LLM trigger adapter and sender on the INTERNAL bus."""
     from plugins.llm_core import _lazy_init, llm_core_handler
     from plugins.llm_sender import llm_sender_handler
-    from src.plugin.manager import _SubscribeAdapter
+    from src.plugin.bridge import _SubscribeAdapter
 
     _lazy_init(bot)
     bot.message_bus.subscribe(
@@ -142,7 +143,9 @@ def e2e_llm_bot(e2e_bot):
     """Like e2e_bot but with LlmGatePlugin registered as EXTERNAL entry point."""
     from plugins.llm_gate import LlmGatePlugin
 
-    e2e_bot.plugin_manager.register(LlmGatePlugin())
+    e2e_bot.message_bus.subscribe(
+        MessageType.EXTERNAL, LlmGatePlugin(), 5
+    )
     return e2e_bot
 
 

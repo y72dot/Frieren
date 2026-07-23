@@ -9,8 +9,11 @@ import pytest
 
 from src.core.message_bus import BusMessage, MessageType
 from src.plugin.base import Event
-from tests.conftest_e2e import assert_api_called, dispatch_raw_event, e2e_bot  # noqa: F401
-
+from tests.conftest_e2e import (  # noqa: F401
+    assert_api_called,
+    dispatch_raw_event,
+    e2e_bot,
+)
 
 # ---------------------------------------------------------------------------
 # Test plugins (inline)
@@ -89,7 +92,7 @@ class TestPipelineBasic:
     @pytest.mark.asyncio
     async def test_command_plugin_e2e(self, e2e_bot):
         """Raw dict → /ping plugin → send_group_msg API call."""
-        e2e_bot.plugin_manager.register(_CmdPlugin())
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _CmdPlugin(), 0)
 
         raw = {
             "post_type": "message",
@@ -147,8 +150,8 @@ class TestPipelineBasic:
                 second_called = True
                 return True
 
-        e2e_bot.plugin_manager.register(_AlwaysMatchTrue())
-        e2e_bot.plugin_manager.register(_SecondPlugin())
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _AlwaysMatchTrue(), 5)
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _SecondPlugin(), 20)
 
         raw = {
             "post_type": "message",
@@ -190,8 +193,8 @@ class TestPipelineBasic:
                 order.append("p20")
                 return True
 
-        e2e_bot.plugin_manager.register(_P20())
-        e2e_bot.plugin_manager.register(_P5())
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _P20(), 20)
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _P5(), 5)
 
         raw = {
             "post_type": "message",
@@ -210,7 +213,7 @@ class TestPipelineBasic:
     async def test_notice_event_passthrough(self, e2e_bot):
         """Notice events are parsed, stored, and dispatched to notice plugins."""
         catcher = _NoticePlugin()
-        e2e_bot.plugin_manager.register(catcher)
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, catcher, 0)
 
         raw = {
             "post_type": "notice",
@@ -231,7 +234,7 @@ class TestPipelineBasic:
     @pytest.mark.asyncio
     async def test_private_message_routing(self, e2e_bot):
         """Private messages route through send_private_msg."""
-        e2e_bot.plugin_manager.register(_PrivateReplyPlugin())
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _PrivateReplyPlugin(), 0)
 
         raw = {
             "post_type": "message",
@@ -265,8 +268,8 @@ class TestPipelineBasic:
                 second_called = True
                 return True
 
-        e2e_bot.plugin_manager.register(_AlwaysMatchFalse())
-        e2e_bot.plugin_manager.register(_SecondHandler())
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _AlwaysMatchFalse(), 10)
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _SecondHandler(), 10)
 
         raw = {
             "post_type": "message",
@@ -327,7 +330,7 @@ class TestPipelineBasic:
                     )
                 return True
 
-        e2e_bot.plugin_manager.register(_DeepPlugin())
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _DeepPlugin(), 0)
 
         raw = {
             "post_type": "message",

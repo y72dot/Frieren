@@ -1,35 +1,31 @@
+"""History package plugin – logs every message event to a JSONL file."""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import aiofiles
 from loguru import logger
 
 from src.plugin.base import Event
-
-if TYPE_CHECKING:
-    from src.core.bot import Bot
+from src.plugin.definition import EventResult, observe
 
 
 class HistoryPlugin:
-    """Log every message event (group + private) to logs/message-history.log
-    as JSONL. Never consumes events -- always passes through."""
-
+    __plugin_id__ = "history"
     name = "history"
     priority = -90
 
     log_path: Path = Path("logs/message-history.log")
 
-    # ------------------------------------------------------------------
-    # Plugin protocol
-    # ------------------------------------------------------------------
+    # -- Legacy interface (kept for test compatibility) --
 
     def match(self, event: Event) -> bool:
         return True
 
-    async def handle(self, event: Event, bot: Bot) -> bool:
+    async def handle(self, event: Event, bot: Any) -> bool:
         line = self._serialize(event.raw)
         if line is None:
             logger.warning("History: event.raw is not serializable, skipping")
@@ -44,9 +40,21 @@ class HistoryPlugin:
         )
         return False
 
-    # ------------------------------------------------------------------
-    # internal helpers
-    # ------------------------------------------------------------------
+    # -- New-style handler --
+
+    @observe("*")
+    async def observe_all(self, ctx, event, raw_msg) -> EventResult:
+        line = self._serialize(event.raw)
+        if line is None:
+            return EventResult.CONTINUE
+
+        self._ensure_log_dir()
+        async with aiofiles.open(self.log_path, "a", encoding="utf-8") as f:
+            await f.write(line + "\n")
+
+        return EventResult.CONTINUE
+
+    # -- helpers --
 
     @staticmethod
     def _serialize(raw: Any) -> str | None:

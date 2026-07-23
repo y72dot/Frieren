@@ -43,6 +43,7 @@ class PluginConfig:
     auto_discover: bool = True
     plugin_dirs: list[str] = field(default_factory=lambda: ["plugins"])
     disabled_plugins: list[str] = field(default_factory=list)
+    plugin_configs: dict[str, dict] = field(default_factory=dict)
 
 
 @dataclass
@@ -643,6 +644,13 @@ def load_config(
     bot = _parse_bot_section(raw.get("bot", {}))
     napcat = _parse_napcat_section(raw.get("napcat", {}))
     plugin = _parse_plugin_section(raw.get("plugin", {}))
+
+    # Parse [plugin_config.<id>] sections into PluginConfig.plugin_configs.
+    plugin_configs_raw = raw.get("plugin_config", {})
+    if isinstance(plugin_configs_raw, dict):
+        for pid, cfg in plugin_configs_raw.items():
+            if isinstance(cfg, dict):
+                plugin.plugin_configs[pid] = cfg
     logging = _parse_logging_section(raw.get("logging", {}))
     filter_cfg = _parse_filter_section(raw.get("filter", {}))
     action_queue = _parse_action_queue_section(

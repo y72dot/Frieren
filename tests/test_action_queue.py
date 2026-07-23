@@ -6,7 +6,7 @@ import asyncio
 import time
 from typing import Any
 
-from plugins.action_queue import action_queue_handler, reset_state
+from plugins.action_queue import ActionQueueBusAdapter, reset_state
 from src.core.config import (
     ActionQueueConfig,
     BotConfig,
@@ -16,7 +16,6 @@ from src.core.config import (
     PluginConfig,
 )
 from src.core.message_bus import BusMessage, MessageBus, MessageType
-from src.plugin.manager import _SubscribeAdapter
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -37,8 +36,8 @@ def _make_bot_config(**kwargs: Any) -> BotConfig:
 
 def _setup_bus_with_handler(
     bot_config: BotConfig,
-) -> tuple[MessageBus, _SubscribeAdapter, Any]:
-    """Create a bus with action_queue handler (p=1) and _QQExec (p=100).
+) -> tuple[MessageBus, ActionQueueBusAdapter, Any]:
+    """Create a bus with ActionQueueBusAdapter (p=1) and _QQExec (p=100).
 
     Returns (bus, adapter, bot).
     """
@@ -46,7 +45,7 @@ def _setup_bus_with_handler(
 
     bus = MessageBus()
 
-    adapter = _SubscribeAdapter(action_queue_handler, "action_queue", 1)
+    adapter = ActionQueueBusAdapter(config=bot_config.action_queue)
     bus.subscribe(MessageType.ACTION, adapter, 1)
 
     from src.core.bot import Bot
@@ -790,9 +789,10 @@ class TestEdgeCases:
         )
         result = await bus.dispatch(msg, bot)
 
-        # _QQExec logs warning and returns None (falsy);
-        # suppressible ACTION not consumed → dispatch returns False
-        assert result is False
+        # ActionQueueBusAdapter's handle calls _raw_call("") via call_next,
+        # so it returns the dict with consumed result.
+        assert isinstance(result, dict)
+        assert result.get("action") == ""
 
     async def test_non_dict_payload(self):
         """Non-dict payload passes through."""
@@ -848,54 +848,40 @@ class TestEdgeCases:
 class TestSpamCleanup:
     async def test_spam_cleanup_on_overflow(self, monkeypatch):
         """When _spam_last exceeds _SPAM_MAX_ENTRIES, stale entries are evicted."""
-        from plugins import action_queue as aq
+        from plugins.action_queue import ActionQueueMiddleware
 
-        aq.reset_state()
+        mw = ActionQueueMiddleware()
+        # Enable spam for send_group_msg
+        mw._spam_actions = {"send_group_msg"}
+        mw._spam_window = 999.0  # huge window so entries stay "fresh"
 
         # Set a very low max to trigger cleanup easily
-        monkeypatch.setattr(aq, "_SPAM_MAX_ENTRIES", 5)
-        aq._spam_window = 999.0  # huge window so entries stay "fresh"
+        mw._SPAM_MAX_ENTRIES = 5
 
-        spam_actions = {"send_group_msg"}
+        # Add entries up to the max
+        for i in range(5):
+            key = f"send_group_msg|{{\"group_id\": {i}, \"message\": \"msg{i}\"}}"
+            mw._spam_last[key] = time.monotonic()
 
-        # Reconfigure to enable spam for our action
-        old_spam = aq._spam_actions
-        old_window = aq._spam_window
-        aq._spam_actions = spam_actions
+        assert len(mw._spam_last) == 5
 
-        try:
-            # Add entries up to the max
-            for i in range(5):
-                key = f"send_group_msg|{{\"group_id\": {i}, \"message\": \"msg{i}\"}}"
-                aq._spam_last[key] = time.monotonic()
+        # Add one more – should trigger cleanup on next _check_spam
+        mw._spam_last["extra_key"] = time.monotonic()
+        assert len(mw._spam_last) == 6  # not cleaned yet (lazy, called from _check_spam)
 
-            assert len(aq._spam_last) == 5
+        # Set a tiny window so the existing entries look stale
+        mw._spam_window = 0.001  # tiny window
+        await asyncio.sleep(0.01)  # ensure entries are older than cutoff
 
-            # Add one more – should trigger cleanup
-            aq._spam_last["extra_key"] = time.monotonic()
-            assert len(aq._spam_last) == 6  # not cleaned yet (lazy, called from _check_spam)
-
-            # Trigger _check_spam with a new key to invoke _maybe_cleanup_spam
-            # First, make a key that does NOT exist yet in _spam_last
-            # We use a large spam_window so all entries are considered "fresh" -
-            # but cleanup uses cutoff = now - _spam_window * 2
-            # With huge spam_window, cutoff is far in the past, so nothing gets cleaned.
-            # Instead, set a tiny window so the existing entries look stale.
-            aq._spam_window = 0.001  # tiny window
-            await asyncio.sleep(0.01)  # ensure entries are older than cutoff
-
-            # Now _check_spam for a new entry should trigger cleanup
-            result = await aq._check_spam(
-                {"action": "send_group_msg", "group_id": 999, "message": "new"}
-            )
-            # Should pass (not spam), and cleanup should have run
-            assert result is False
-            # After cleanup, old stale entries should be gone
-            assert len(aq._spam_last) < 6
-        finally:
-            aq._spam_actions = old_spam
-            aq._spam_window = old_window
-            aq.reset_state()
+        # Now _check_spam for a new entry should trigger cleanup
+        result = await mw._check_spam(
+            "send_group_msg",
+            {"action": "send_group_msg", "group_id": 999, "message": "new"},
+        )
+        # Should pass (not spam), and cleanup should have run
+        assert result is False
+        # After cleanup, old stale entries should be gone
+        assert len(mw._spam_last) < 6
 
 
 class TestConfigParsing:

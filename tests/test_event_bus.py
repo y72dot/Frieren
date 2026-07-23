@@ -4,7 +4,7 @@ import pytest
 
 from src.core.event_bus import EventBus
 from src.core.filter_manager import FilterManager
-from src.core.message_bus import MessageBus
+from src.core.message_bus import MessageBus, MessageType
 from src.core.message_store import MessageStore
 from src.plugin.base import Event
 from src.plugin.manager import PluginManager
@@ -166,7 +166,7 @@ async def test_dispatch_routes_message_to_plugin_manager():
             b._consumed_events.append(event)
             return True
 
-    bot.plugin_manager.register(_Catcher())
+    bot.message_bus.subscribe(MessageType.EXTERNAL, _Catcher(), 0)
 
     raw = {
         "post_type": "message",

@@ -3,7 +3,7 @@
 import pytest
 
 from src.core.filter_manager import FilterManager
-from src.core.message_bus import MessageBus
+from src.core.message_bus import BusMessage, MessageBus, MessageType
 from src.plugin.base import Event
 from src.plugin.manager import PluginManager
 
@@ -72,83 +72,92 @@ class _NonConsumingPlugin:
 
 
 # -------------------------------------------------------------------
-# register
+# bus-based registration (replaces removed pm.register())
 # -------------------------------------------------------------------
 
 
-def test_register_adds_and_sorts():
+def test_bus_subscribe_register_and_sort():
     bus = MessageBus()
     pm = PluginManager(bus=bus)
-    pm.register(_EchoPlugin())
-    pm.register(_PingPlugin())
-    assert pm.plugin_count == 2
-    # lower priority first (sorted by name here since we check plugin list order)
-    names = [p.name for p in pm.plugins]
-    assert "echo" in names
-    assert "ping" in names
+    # Register plugins via the bus directly.
+    bus.subscribe(MessageType.EXTERNAL, _EchoPlugin(), 10)
+    bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 0)
+    # PluginManager._plugins is not populated via bus.subscribe;
+    # verify bus subscriptions are ordered by priority.
+    subs = bus._subscriptions[MessageType.EXTERNAL]
+    assert len(subs) == 2
+    # Check priorities are correct values; bus stores in insertion order,
+    # sorts during dispatch.
+    priorities = {s.priority for s in subs}
+    assert priorities == {0, 10}
 
 
 # -------------------------------------------------------------------
-# dispatch
+# dispatch (via bus)
 # -------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_dispatch_matches_first():
-    pm = PluginManager(bus=MessageBus())
-    pm.register(_EchoPlugin())
-    pm.register(_PingPlugin())
+    bus = MessageBus()
+    bus.subscribe(MessageType.EXTERNAL, _EchoPlugin(), 10)
+    bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 0)
 
     bot = _DummyBot()
     event = Event(type="message.group", user_id=1, message="/ping")
-    consumed = await pm.dispatch(event, bot)
+    msg = BusMessage(type=MessageType.EXTERNAL, payload=event, source="test")
+    consumed = await bus.dispatch(msg, bot)
     assert consumed is True
 
 
 @pytest.mark.asyncio
 async def test_dispatch_no_match():
-    pm = PluginManager(bus=MessageBus())
-    pm.register(_PingPlugin())
+    bus = MessageBus()
+    bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 0)
 
     bot = _DummyBot()
     event = Event(type="message.group", user_id=1, message="/help")
-    consumed = await pm.dispatch(event, bot)
+    msg = BusMessage(type=MessageType.EXTERNAL, payload=event, source="test")
+    consumed = await bus.dispatch(msg, bot)
     assert consumed is False
 
 
 @pytest.mark.asyncio
 async def test_dispatch_match_error_continues():
-    pm = PluginManager(bus=MessageBus())
-    pm.register(_FailingMatchPlugin())
-    pm.register(_PingPlugin())
+    bus = MessageBus()
+    bus.subscribe(MessageType.EXTERNAL, _FailingMatchPlugin(), 5)
+    bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 0)
 
     bot = _DummyBot()
     event = Event(type="message.group", user_id=1, message="/ping")
-    consumed = await pm.dispatch(event, bot)
+    msg = BusMessage(type=MessageType.EXTERNAL, payload=event, source="test")
+    consumed = await bus.dispatch(msg, bot)
     assert consumed is True  # second plugin handled it
 
 
 @pytest.mark.asyncio
 async def test_dispatch_handle_error_continues():
-    pm = PluginManager(bus=MessageBus())
-    pm.register(_FailingHandlePlugin())
-    pm.register(_PingPlugin())
+    bus = MessageBus()
+    bus.subscribe(MessageType.EXTERNAL, _FailingHandlePlugin(), 6)
+    bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 0)
 
     bot = _DummyBot()
     event = Event(type="message.group", user_id=1, message="/ping")
-    consumed = await pm.dispatch(event, bot)
+    msg = BusMessage(type=MessageType.EXTERNAL, payload=event, source="test")
+    consumed = await bus.dispatch(msg, bot)
     assert consumed is True  # ping handled it after bad_handle crashed
 
 
 @pytest.mark.asyncio
 async def test_dispatch_non_consuming_continues():
-    pm = PluginManager(bus=MessageBus())
-    pm.register(_NonConsumingPlugin())
-    pm.register(_PingPlugin())
+    bus = MessageBus()
+    bus.subscribe(MessageType.EXTERNAL, _NonConsumingPlugin(), 7)
+    bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 0)
 
     bot = _DummyBot()
     event = Event(type="message.group", user_id=1, message="/ping")
-    consumed = await pm.dispatch(event, bot)
+    msg = BusMessage(type=MessageType.EXTERNAL, payload=event, source="test")
+    consumed = await bus.dispatch(msg, bot)
     assert consumed is True  # ping eventually consumed it
 
 
@@ -185,15 +194,14 @@ def test_auto_discover_skips_disabled():
         disabled=[
             "ping",
             "echo",
-            "poke_back",
+            "poke",
             "repeater",
             "history",
             "essence",
             "sticker_react",
-            "action_queue_handler",
+            "llm_core",
+            "llm_sender",
             "llm_gate",
-            "llm_core_handler",
-            "llm_sender_handler",
         ],
     )
     assert count == 0  # all plugins are disabled

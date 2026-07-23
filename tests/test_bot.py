@@ -105,14 +105,19 @@ async def test_reload_plugins_no_config(bot_config: BotConfig):
 
 @pytest.mark.asyncio
 async def test_reload_plugins_replaces_manager(bot_config: BotConfig):
+    from src.core.message_bus import MessageType
+
     b = Bot(config=bot_config)
     old_pm = b.plugin_manager
-    b.plugin_manager.register(_FakePlugin())
+    b.message_bus.subscribe(MessageType.EXTERNAL, _FakePlugin(), 0)
 
     b.config.plugin.plugin_dirs = ["nonexistent_dir"]
     await b.reload_plugins()
-    assert b.plugin_manager is not old_pm
-    assert b.plugin_manager.plugin_count == 0
+    # With PluginRuntime, reload delegates to runtime.reload() which
+    # drains old generations atomically. The PluginManager persists.
+    assert b.plugin_manager is old_pm
+    # Runtime reload completed and generation advanced.
+    assert b.plugin_runtime.generation >= 1
 
 
 # -------------------------------------------------------------------

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
 
 import pytest
@@ -10,14 +9,10 @@ import pytest
 from src.core.config import (
     ActionQueueConfig,
     BotConfig,
-    BotConfigSection,
     FilterConfig,
     FilterModeConfig,
-    LoggingConfigSection,
-    NapCatConfig,
-    PluginConfig,
 )
-from src.core.llm import LlmResponse, ToolCall
+from src.core.llm import ToolCall
 from src.core.message_bus import BusMessage, MessageType
 from src.plugin.base import Event
 from tests.conftest_e2e import (
@@ -26,7 +21,6 @@ from tests.conftest_e2e import (
     e2e_bot,  # noqa: F401
     e2e_llm_bot,  # noqa: F401
 )
-
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -52,8 +46,7 @@ async def _run_tool(bot, tool_calls: list[ToolCall], group_id=456, user_id=111):
 
 def _setup_action_queue_bot(bot, **aq_kwargs):
     """Register action_queue handler on bot's bus and configure it."""
-    from plugins.action_queue import action_queue_handler, reset_state
-    from src.plugin.manager import _SubscribeAdapter
+    from plugins.action_queue import ActionQueueBusAdapter, reset_state  # noqa: F401
 
     reset_state()
     aq_config = ActionQueueConfig(**aq_kwargs)
@@ -67,7 +60,7 @@ def _setup_action_queue_bot(bot, **aq_kwargs):
         llm=bot.config.llm,
         env=bot.config.env,
     )
-    adapter = _SubscribeAdapter(action_queue_handler, "action_queue", 1)
+    adapter = ActionQueueBusAdapter(config=aq_config)
     bot.message_bus.subscribe(MessageType.ACTION, adapter, 1)
     return bot
 
@@ -252,7 +245,6 @@ class TestFilterErrors:
     @pytest.mark.asyncio
     async def test_filter_blocks_entire_event(self, e2e_bot):
         """Blacklisted group → event blocked → no plugin executed."""
-        from src.core.config import FilterConfig, FilterModeConfig
 
         e2e_bot.filter_mgr.update_config(
             BotConfig(
@@ -282,7 +274,7 @@ class TestFilterErrors:
                 plugin_called = True
                 return True
 
-        e2e_bot.plugin_manager.register(_P())
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, _P(), 0)
 
         raw = {
             "post_type": "message",

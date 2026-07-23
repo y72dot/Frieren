@@ -1,5 +1,7 @@
 # QQ 机器人 Python 项目计划书
 
+> 文档状态：历史归档。本文是项目建立早期蓝图，部分目录、存储、工具与插件设计已被当前实现替代，不再作为待办清单。当前开发入口见 `DEVELOPMENT.md`，插件系统后续工作见 `PLUGIN_SYSTEM_REFACTOR_PLAN.md`。
+
 ## 一、项目概述
 
 基于 **NapCatQQ（协议层）+ 自研 Python 核心（业务层）** 构建的 QQ 机器人。核心完全从零编写，不依赖 NoneBot / AstrBot / Koishi 等上层框架，支持自定义插件系统和 AI Agent 智能体功能。

@@ -1,0 +1,12 @@
+[plugin]
+id = "ping"
+name = "Ping"
+version = "1.0.0"
+entrypoint = "plugins.ping.plugin:PingPlugin"
+sdk = ">=1.0,<2.0"
+description = "Responds /ping with Pong!"
+
+[permissions]
+qq = ["message.send"]
+storage = []
+scheduler = false

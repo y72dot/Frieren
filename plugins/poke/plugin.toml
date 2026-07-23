@@ -1,0 +1,12 @@
+[plugin]
+id = "poke"
+name = "Poke"
+version = "1.0.0"
+entrypoint = "plugins.poke.plugin:PokePlugin"
+sdk = ">=1.0,<2.0"
+description = "Pokes back when poked in a group"
+
+[permissions]
+qq = ["message.send", "message.react"]
+storage = []
+scheduler = false

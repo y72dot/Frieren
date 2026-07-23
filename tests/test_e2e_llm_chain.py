@@ -8,7 +8,7 @@ import pytest
 
 from src.core.config import LLMConfig
 from src.core.llm import LlmResponse, ToolCall
-from src.plugin.base import Event
+from src.core.message_bus import MessageType
 from tests.conftest_e2e import (
     FakeLlmProvider,
     assert_api_called,
@@ -215,7 +215,7 @@ class TestLLMChainRouting:
             model="fake",
             max_turns=3,
         )
-        e2e_bot.plugin_manager.register(LlmGatePlugin())
+        e2e_bot.message_bus.subscribe(MessageType.EXTERNAL, LlmGatePlugin(), 5)
 
         provider = _make_provider_responses(e2e_bot, [LlmResponse(text="Should not send")])
 

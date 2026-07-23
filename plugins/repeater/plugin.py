@@ -1,40 +1,35 @@
-"""Repeater plugin: repeats the latest group message when the two most recent
-messages (excluding the bot) come from different users and have identical content."""
+"""Repeater package plugin – repeats matching consecutive messages."""
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import Any
 
 from loguru import logger
 
 from src.plugin.base import Event
+from src.plugin.definition import EventResult, on_event
 
-if TYPE_CHECKING:
-    from src.core.bot import Bot
-
-# Track last repeated content per group to prevent duplicate repeats
 _last_repeated: dict[int, str] = {}
-
-# Per-group lock to prevent race conditions from duplicate napcat events
 _locks: dict[int, asyncio.Lock] = {}
 
 
 class RepeaterPlugin:
+    __plugin_id__ = "repeater"
     name = "repeater"
     priority = 100
+
+    # -- Legacy interface (kept for test compatibility) --
 
     def match(self, event: Event) -> bool:
         return event.type == "message.group"
 
-    async def handle(self, event: Event, bot: Bot) -> bool:
-        # 1. Skip bot's own messages (infinite loop prevention)
+    async def handle(self, event: Event, bot: Any) -> bool:
         if event.user_id == bot.config.bot.qq:
             logger.debug("repeater: self-message, skipping")
             return False
 
         stripped = event.message.strip()
-        # 2. Skip empty messages (pure image/sticker)
         if not stripped:
             return False
 
@@ -42,43 +37,34 @@ class RepeaterPlugin:
         if group_id is None:
             return False
 
-        # 3. Per-group lock to prevent race conditions from duplicate napcat events
         lock = _locks.setdefault(group_id, asyncio.Lock())
         async with lock:
-            # 4. Query last 2 non-bot messages for this group.
-            #    In production EventBus already recorded the current event,
-            #    so the most recent entry IS the current message.
             recent_msgs = bot.msg_store.recent(
                 group_id, n=2, exclude_user_id=bot.config.bot.qq
             )
 
-            # 5. Need at least 2 non-bot messages to form a pair
             if len(recent_msgs) < 2:
                 return False
 
             msg_prev = recent_msgs[-2]
             msg_curr = recent_msgs[-1]
 
-            # 6. Same user -> no repeat
             if msg_prev.user_id == msg_curr.user_id:
                 logger.debug(
                     f"repeater: same_user grp={group_id} uid={msg_curr.user_id}, skipping"
                 )
                 return False
 
-            # 7. Different content -> no repeat
             if msg_prev.content != msg_curr.content:
                 return False
 
             last_content = msg_curr.content
-            # 8. Already repeated this content?
             if _last_repeated.get(group_id) == last_content:
                 logger.debug(
                     f"repeater: already_repeated grp={group_id} content={last_content[:30]}, skipping"
                 )
                 return False
 
-            # 9. Commit state and repeat
             _last_repeated[group_id] = last_content
             logger.info(
                 f"repeater: repeat grp={group_id} uid={event.user_id} content={last_content[:50]}"
@@ -86,5 +72,50 @@ class RepeaterPlugin:
 
             await bot.api.send_group_msg(group_id, last_content)
 
-        # 10. Never consume the event
         return False
+
+    # -- New-style handler --
+
+    @on_event("message.group", priority=100)
+    async def handle_repeat(self, ctx, event, raw_msg) -> EventResult:
+        if event.user_id == ctx.config.bot_id:
+            return EventResult.CONTINUE
+
+        stripped = event.message.strip()
+        if not stripped:
+            return EventResult.CONTINUE
+
+        group_id = event.group_id
+        if group_id is None:
+            return EventResult.CONTINUE
+
+        lock = _locks.setdefault(group_id, asyncio.Lock())
+        async with lock:
+            recent_msgs = await ctx.get_recent_messages(
+                group_id, n=2, exclude_user_id=ctx.config.bot_id
+            )
+
+            if len(recent_msgs) < 2:
+                return EventResult.CONTINUE
+
+            msg_prev = recent_msgs[-2]
+            msg_curr = recent_msgs[-1]
+
+            if msg_prev.user_id == msg_curr.user_id:
+                return EventResult.CONTINUE
+
+            if msg_prev.content != msg_curr.content:
+                return EventResult.CONTINUE
+
+            last_content = msg_curr.content
+            if _last_repeated.get(group_id) == last_content:
+                return EventResult.CONTINUE
+
+            _last_repeated[group_id] = last_content
+            logger.info(
+                f"repeater: repeat grp={group_id} uid={event.user_id} content={last_content[:50]}"
+            )
+
+            await ctx.api.send_group_msg(group_id, last_content)
+
+        return EventResult.CONTINUE

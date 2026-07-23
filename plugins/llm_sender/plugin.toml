@@ -1,0 +1,12 @@
+[plugin]
+id = "llm_sender"
+name = "LLM Sender"
+version = "1.0.0"
+entrypoint = "plugins.llm_sender.plugin:LlmSenderPlugin"
+sdk = ">=1.0,<2.0"
+description = "Formats, chunks, and sends LLM replies via INTERNAL messages"
+
+[permissions]
+qq = ["message.send"]
+storage = []
+scheduler = false
