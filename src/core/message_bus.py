@@ -240,7 +240,10 @@ class MessageBus:
                 # -- per-plugin filter: skip this plugin only --
                 if (
                     msg.type == MessageType.EXTERNAL
-                    and bot.filter_mgr.is_plugin_blocked(sub.handler.name, msg.payload)
+                    and bot.filter_mgr.is_plugin_blocked(
+                        getattr(sub.handler, "plugin_id", None) or sub.handler.name,
+                        msg.payload,
+                    )
                 ):
                     continue
 

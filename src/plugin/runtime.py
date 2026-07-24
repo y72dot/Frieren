@@ -417,19 +417,19 @@ class PluginRuntime:
         ctx = plugin.context
 
         for cmd in d.commands:
-            adapter = _CommandSpecAdapter(cmd, plugin_context=ctx)
+            adapter = _CommandSpecAdapter(cmd, plugin_context=ctx, plugin_id=plugin.plugin_id)
             plugin.scope.subscribe(MessageType.EXTERNAL, adapter, cmd.priority)
 
         for eh in d.event_handlers:
-            adapter = _EventSpecAdapter(eh, plugin_context=ctx)
+            adapter = _EventSpecAdapter(eh, plugin_context=ctx, plugin_id=plugin.plugin_id)
             plugin.scope.subscribe(MessageType.EXTERNAL, adapter, eh.priority)
 
         for obs in d.observers:
-            adapter = _ObserverSpecAdapter(obs, plugin_context=ctx)
+            adapter = _ObserverSpecAdapter(obs, plugin_context=ctx, plugin_id=plugin.plugin_id)
             plugin.scope.subscribe(MessageType.EXTERNAL, adapter, 100)
 
         for ih in d.internal_handlers:
-            adapter = _InternalSpecAdapter(ih, plugin_context=ctx)
+            adapter = _InternalSpecAdapter(ih, plugin_context=ctx, plugin_id=plugin.plugin_id)
             msg_type = (
                 MessageType.INTERNAL
                 if ih.message_type == "internal"

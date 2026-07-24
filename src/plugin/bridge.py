@@ -28,11 +28,12 @@ _CQ_STRIP = re.compile(r"\[CQ:[^\]]+\]")
 class _CommandSpecAdapter:
     """Adapts a :class:`CommandSpec` to the bus handler protocol."""
 
-    def __init__(self, spec, plugin_context=None) -> None:
+    def __init__(self, spec, plugin_context=None, plugin_id: str | None = None) -> None:
         self._spec = spec
         self._ctx = plugin_context
         self.name = spec.name
         self.priority = spec.priority
+        self.plugin_id = plugin_id
 
     def match(self, event) -> bool:
         msg = _CQ_STRIP.sub("", event.message).strip()
@@ -65,11 +66,12 @@ class _CommandSpecAdapter:
 class _EventSpecAdapter:
     """Adapts an :class:`EventHandlerSpec` to the bus handler protocol."""
 
-    def __init__(self, spec, plugin_context=None) -> None:
+    def __init__(self, spec, plugin_context=None, plugin_id: str | None = None) -> None:
         self._spec = spec
         self._ctx = plugin_context
         self.name = f"{spec.event_type}:{spec.priority}"
         self.priority = spec.priority
+        self.plugin_id = plugin_id
 
     def match(self, event) -> bool:
         if self._spec.event_type == "*":
@@ -99,11 +101,12 @@ class _EventSpecAdapter:
 class _ObserverSpecAdapter:
     """Adapts an :class:`ObserverSpec` – always matches, never consumes."""
 
-    def __init__(self, spec, plugin_context=None) -> None:
+    def __init__(self, spec, plugin_context=None, plugin_id: str | None = None) -> None:
         self._spec = spec
         self._ctx = plugin_context
         self.name = f"obs:{spec.event_type}"
         self.priority = 100  # late observer
+        self.plugin_id = plugin_id
 
     def match(self, event) -> bool:
         if self._spec.event_type == "*":
@@ -121,11 +124,12 @@ class _ObserverSpecAdapter:
 class _InternalSpecAdapter:
     """Adapts an :class:`InternalHandlerSpec` to the bus handler protocol."""
 
-    def __init__(self, spec, plugin_context=None) -> None:
+    def __init__(self, spec, plugin_context=None, plugin_id: str | None = None) -> None:
         self._spec = spec
         self._ctx = plugin_context
         self.name = f"int:{spec.topic}" if spec.topic else "internal_handler"
         self.priority = 0
+        self.plugin_id = plugin_id
 
     def match(self, payload) -> bool:
         if self._spec.topic:

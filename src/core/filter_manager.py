@@ -89,7 +89,7 @@ class FilterManager:
             self._log_pass(scope, "disabled", event)
             return False
 
-        if event.type not in ("message.group", "message.private"):
+        if event.type == "meta_event" or event.type.startswith("request"):
             return False
 
         bypass_reason = self._bypass_reason(event)
