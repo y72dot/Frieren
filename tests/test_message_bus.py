@@ -1,5 +1,7 @@
 """Tests for MessageBus: subscribe, dispatch, emit, flush, suppression."""
 
+from typing import Any
+
 import pytest
 
 from src.core.config import (
@@ -102,21 +104,21 @@ class _SpamFilter:
 def test_subscribe_adds_handler():
     bus = MessageBus()
     bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 0)
-    assert bus.subscription_count == 2  # ping + built-in _qq_exec for ACTION
+    assert bus.subscription_count == 1
 
 
 def test_subscribe_duplicate_replaces():
     bus = MessageBus()
     bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 0)
     bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 10)
-    assert bus.subscription_count == 2  # ping + _qq_exec
+    assert bus.subscription_count == 1
 
 
 def test_unsubscribe_removes():
     bus = MessageBus()
     bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 0)
     assert bus.unsubscribe(MessageType.EXTERNAL, "ping") is True
-    assert bus.subscription_count == 1  # only _qq_exec
+    assert bus.subscription_count == 0
 
 
 def test_unsubscribe_missing():
@@ -183,14 +185,30 @@ async def test_dispatch_external_passthrough():
 
 
 # -------------------------------------------------------------------
-# dispatch – ACTION (suppressible, built-in _qq_exec)
+# dispatch – ACTION (suppressible)
 # -------------------------------------------------------------------
 
 
+class _ActionTerminal:
+    """Simple ACTION terminal handler for tests."""
+
+    name = "action_terminal"
+    priority = 100
+
+    def match(self, payload) -> bool:
+        return isinstance(payload, dict) and "action" in payload
+
+    async def handle(self, payload, bot) -> Any:
+        action = payload["action"]
+        params = {k: v for k, v in payload.items() if k != "action"}
+        return await bot.api._raw_call(action, **params)
+
+
 @pytest.mark.asyncio
-async def test_dispatch_action_qq_exec():
-    """ACTION messages should be handled by the built-in _qq_exec."""
+async def test_dispatch_action_terminal():
+    """ACTION messages should be handled by a registered terminal handler."""
     bus = MessageBus()
+    bus.subscribe(MessageType.ACTION, _ActionTerminal(), 100)
     bot = _MinimalBot(bus)
 
     msg = BusMessage(
@@ -205,9 +223,10 @@ async def test_dispatch_action_qq_exec():
 
 @pytest.mark.asyncio
 async def test_dispatch_action_spam_suppressed():
-    """A spam filter (pri=0) should suppress spam messages before _qq_exec."""
+    """A spam filter (pri=0) should suppress spam messages before terminal."""
     bus = MessageBus()
     bus.subscribe(MessageType.ACTION, _SpamFilter(), 0)
+    bus.subscribe(MessageType.ACTION, _ActionTerminal(), 100)
     bot = _MinimalBot(bus)
 
     msg = BusMessage(
@@ -220,14 +239,15 @@ async def test_dispatch_action_spam_suppressed():
     )
     result = await bus.dispatch(msg, bot)
     assert result is True  # suppressed by spam filter
-    assert len(bot.api.calls) == 0  # _qq_exec never called
+    assert len(bot.api.calls) == 0  # terminal never called
 
 
 @pytest.mark.asyncio
 async def test_dispatch_action_spam_filter_passes():
-    """Non-spam messages should pass through the filter to _qq_exec."""
+    """Non-spam messages should pass through the filter to the terminal."""
     bus = MessageBus()
     bus.subscribe(MessageType.ACTION, _SpamFilter(), 0)
+    bus.subscribe(MessageType.ACTION, _ActionTerminal(), 100)
     bot = _MinimalBot(bus)
 
     msg = BusMessage(
@@ -332,6 +352,7 @@ async def test_dispatch_lifecycle_all_run():
 async def test_emit_and_flush():
     """Emitted messages should be processed during flush."""
     bus = MessageBus()
+    bus.subscribe(MessageType.ACTION, _ActionTerminal(), 100)
     bot = _MinimalBot(bus)
 
     bus.emit(
@@ -351,6 +372,7 @@ async def test_emit_and_flush():
 async def test_emit_and_wait():
     """emit_and_wait should process immediately, not through the queue."""
     bus = MessageBus()
+    bus.subscribe(MessageType.ACTION, _ActionTerminal(), 100)
     bot = _MinimalBot(bus)
 
     msg = BusMessage(
@@ -388,11 +410,10 @@ async def test_dispatch_depth_limit():
 def test_clear_resets_subscriptions():
     bus = MessageBus()
     bus.subscribe(MessageType.EXTERNAL, _PingPlugin(), 0)
-    assert bus.subscription_count > 1
+    assert bus.subscription_count == 1
 
     bus.clear()
-    # After clear, only built-in _qq_exec remains
-    assert bus.subscription_count == 1
+    assert bus.subscription_count == 0
     assert len(bus._queue) == 0
 
 

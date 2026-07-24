@@ -37,7 +37,7 @@ def _make_bot_config(**kwargs: Any) -> BotConfig:
 def _setup_bus_with_handler(
     bot_config: BotConfig,
 ) -> tuple[MessageBus, ActionQueueBusAdapter, Any]:
-    """Create a bus with ActionQueueBusAdapter (p=1) and _QQExec (p=100).
+    """Create a bus with ActionQueueBusAdapter (p=1).
 
     Returns (bus, adapter, bot).
     """
@@ -135,7 +135,7 @@ class _TimedApiClient:
 
 class TestBypassActions:
     async def test_bypass_action_passes_through(self):
-        """get_group_info (in default bypass) is not consumed; _QQExec runs."""
+        """get_group_info (in default bypass) passes through adapter to _raw_call."""
         cfg = _make_bot_config()
         bus, _adapter, bot = _setup_bus_with_handler(cfg)
         api = _TimedApiClient(bus=bus)
@@ -196,7 +196,7 @@ class TestBypassActions:
 
 class TestBlockActions:
     async def test_blocked_action_dropped(self):
-        """send_group_msg in block list is consumed, _QQExec never runs."""
+        """send_group_msg in block list is consumed by adapter."""
         cfg = _make_bot_config(block_actions=["send_group_msg"])
         bus, _adapter, bot = _setup_bus_with_handler(cfg)
         api = _TimedApiClient(bus=bus)
@@ -210,7 +210,7 @@ class TestBlockActions:
         result = await bus.dispatch(msg, bot)
 
         assert result is True  # consumed by handler
-        assert len(api.calls) == 0  # _QQExec never called
+        assert len(api.calls) == 0  # adapter consumed, no API call made
 
     async def test_non_blocked_action_still_executes(self):
         """Only actions in block list are dropped; others proceed."""
@@ -808,7 +808,7 @@ class TestEdgeCases:
         )
         result = await bus.dispatch(msg, bot)
 
-        # _QQExec crashes on str payload; exception caught → not consumed
+        # adapter doesn't match non-dict payload → not consumed
         assert result is False
 
     async def test_private_message_no_group_id(self):

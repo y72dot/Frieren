@@ -7,7 +7,6 @@ instances dispatched by type+priority.
 
 from __future__ import annotations
 
-import sys
 import time
 import uuid
 from contextlib import nullcontext
@@ -98,50 +97,6 @@ class Subscription:
 
 
 # ---------------------------------------------------------------------------
-# built-in QQExec – final ACTION handler
-# ---------------------------------------------------------------------------
-
-
-class _QQExec:
-    """Built-in fallback handler that executes ACTION messages against the
-    real napcat API. Registered at fixed priority=100.
-
-    Placed here (not in api_client) to avoid circular imports.
-    """
-
-    name = "_qq_exec"
-    priority = 100
-
-    def match(self, payload: Any) -> bool:
-        return True
-
-    async def handle(self, payload: Any, bot: Bot) -> Any:
-        action: str = payload.get("action", "")
-        if not action:
-            logger.warning("ACTION message without 'action' field, dropping")
-            return None
-        quiet = bool(payload.get("_qqbot_quiet", False))
-        params = {
-            k: v
-            for k, v in payload.items()
-            if k not in {"action", "_qqbot_quiet"}
-        }
-        logger.debug(f"_QQExec: {action}")
-        try:
-            return await bot.api._raw_call(action, log_errors=not quiet, **params)
-        except Exception as exc:
-            if not quiet:
-                raise
-            logger.debug(f"Optional QQ action failed: {action}: {exc}")
-            return {
-                "status": "failed",
-                "retcode": -1,
-                "data": None,
-                "message": str(exc),
-            }
-
-
-# ---------------------------------------------------------------------------
 # MessageBus
 # ---------------------------------------------------------------------------
 
@@ -160,15 +115,11 @@ class MessageBus:
     4. ``flush(bot)`` – drain the internal queue (breadth-first).
     """
 
-    # Sentinel for the built-in ACTION executor.
-    _MAX_PRIORITY = sys.maxsize
-
     def __init__(self) -> None:
         self._subscriptions: dict[MessageType, list[Subscription]] = {
             t: [] for t in MessageType
         }
         self._queue: list[BusMessage] = []
-        self._register_builtins()
 
     # ------------------------------------------------------------------
     # subscription management
@@ -186,16 +137,6 @@ class MessageBus:
         If *scope* is provided, the subscription is tracked and will be
         removed when ``scope.close()`` is called.
         """
-        # Don't allow overriding the built-in QQExec.
-        if handler.name == "_qq_exec":
-            existing = [
-                s
-                for s in self._subscriptions[MessageType.ACTION]
-                if s.handler.name == "_qq_exec"
-            ]
-            if existing:
-                return
-
         # Avoid duplicate subscriptions by name + type.
         for s in self._subscriptions[message_type]:
             if s.handler.name == handler.name:
@@ -433,16 +374,7 @@ class MessageBus:
             )
             self._queue = []
 
-    # ------------------------------------------------------------------
-    # internal
-    # ------------------------------------------------------------------
-
-    def _register_builtins(self) -> None:
-        """Register mandatory built-in handlers."""
-        self.subscribe(MessageType.ACTION, _QQExec(), _QQExec.priority)
-
     def clear(self) -> None:
         """Remove all subscriptions and clear the queue (for testing)."""
         self._subscriptions = {t: [] for t in MessageType}
         self._queue = []
-        self._register_builtins()
